@@ -1,0 +1,19 @@
+@model MovieEditViewModel
+@{
+    ViewData["Title"] = "Редактировать";
+}
+
+<section class="panel">
+    <div class="panel-header">
+        <h1>Редактировать карточку</h1>
+    </div>
+
+    <form asp-action="Edit" method="post" class="stack-form">
+        <input asp-for="Id" type="hidden" />
+        <div asp-validation-summary="ModelOnly" class="alert error"></div>
+
+        <partial name="_MovieStandaloneFormFields" model="Model" />
+
+        <button class="button primary" type="submit">Сохранить изменения</button>
+    </form>
+</section>

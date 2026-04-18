@@ -1,0 +1,30 @@
+@model SurpriseMovieViewModel
+@{
+    ViewData["Title"] = "Surprise me";
+    ViewData["DismissScoreThreshold"] = 50m;
+}
+
+<section class="panel dashboard-shell">
+    <div class="section-head section-head-inline">
+        <div>
+            <h1 class="section-title">Surprise me</h1>
+            <div class="section-subtitle">Eligible movies: <strong>@Model.EligibleCount</strong></div>
+        </div>
+        <div class="toolbar dashboard-actions">
+            <a class="button primary" asp-controller="Home" asp-action="Surprise">Randomize</a>
+        </div>
+    </div>
+
+    @if (Model.Pick is null)
+    {
+        <div class="empty-state">Nothing is ready for Surprise me yet. Review tagged items or restore dismissed titles first.</div>
+    }
+    else
+    {
+        <div class="movie-grid fixed-grid fixed-grid-single">
+            <partial name="_DiscoveryCard" model="Model.Pick" />
+        </div>
+    }
+</section>
+
+<partial name="_WatchFeedbackModal" />

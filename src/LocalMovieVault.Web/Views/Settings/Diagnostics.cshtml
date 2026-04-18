@@ -1,0 +1,65 @@
+@model DiagnosticsViewModel
+@{
+    ViewData["Title"] = "Diagnostics";
+}
+
+<section class="panel settings-shell">
+    <div class="panel-header library-header">
+        <div>
+            <div class="eyebrow">Diagnostics</div>
+            <h1>App Log</h1>
+            <div class="panel-subtitle">Recent in-app events for the flows that usually matter during fixes: imports, watch actions, dismiss/restore, and related state changes.</div>
+        </div>
+        <div class="toolbar">
+            <a class="button subtle" asp-action="Index">Back to Settings</a>
+        </div>
+    </div>
+
+    <section class="settings-panel">
+        <div class="field-help">Showing @Model.EventCount recent events from newest to oldest.</div>
+
+        @if (Model.Events.Count == 0)
+        {
+            <div class="empty-state">
+                <h3>No events yet</h3>
+                <p>Run an import or update a movie to start building a diagnostics trail.</p>
+            </div>
+        }
+        else
+        {
+            <div class="diagnostics-list">
+                @foreach (var appEvent in Model.Events)
+                {
+                    <article class="diagnostic-card">
+                        <div class="diagnostic-card-header">
+                            <div>
+                                <div class="eyebrow">@appEvent.Scope</div>
+                                <h3>@appEvent.EventType</h3>
+                            </div>
+                            <div class="diagnostic-outcome diagnostic-outcome-@appEvent.Outcome.ToLowerInvariant()">@appEvent.Outcome</div>
+                        </div>
+                        <div class="diagnostic-summary">@appEvent.Summary</div>
+                        <div class="diagnostic-meta">
+                            <span>@appEvent.OccurredUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</span>
+                            @if (appEvent.RelatedMovieId.HasValue)
+                            {
+                                <span>Movie #@appEvent.RelatedMovieId: @appEvent.RelatedMovieTitle</span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(appEvent.RequestPath))
+                            {
+                                <span>@appEvent.RequestPath</span>
+                            }
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(appEvent.DetailsJson))
+                        {
+                            <details class="diagnostic-details">
+                                <summary>Details</summary>
+                                <pre>@appEvent.DetailsJson</pre>
+                            </details>
+                        }
+                    </article>
+                }
+            </div>
+        }
+    </section>
+</section>

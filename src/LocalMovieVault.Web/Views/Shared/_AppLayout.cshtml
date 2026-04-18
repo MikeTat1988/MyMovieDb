@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>@ViewData["Title"] - MyMovieDB</title>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    <header class="topbar">
+        <div class="container topbar-inner">
+            <nav class="topbar-nav" aria-label="Primary">
+                <a class="nav-link" asp-controller="Home" asp-action="Index">Best Match</a>
+                <a class="nav-link" asp-controller="Home" asp-action="Surprise">Surprise me</a>
+                <a class="nav-link" asp-controller="Movies" asp-action="Index">Library</a>
+                <a class="settings-link nav-link nav-link-icon" asp-controller="Settings" asp-action="Index" aria-label="Open settings">&#9881;</a>
+            </nav>
+            <a class="settings-link" asp-controller="Settings" asp-action="Index" aria-label="Open settings">⚙</a>
+        </div>
+    </header>
+
+    <main class="container page">
+        @if (TempData["StatusMessage"] is string statusMessage && !string.IsNullOrWhiteSpace(statusMessage))
+        {
+            <div class="alert success">@statusMessage</div>
+        }
+
+        @RenderBody()
+    </main>
+
+    <script src="~/js/app-main.js" asp-append-version="true"></script>
+</body>
+</html>

@@ -1,0 +1,104 @@
+@using LocalMovieVault.Web.Helpers
+@using LocalMovieVault.Web.Models
+@model Movie
+@{
+    var dismissThreshold = ViewData["DismissScoreThreshold"] is decimal threshold ? threshold : 50m;
+    var librarySection = ViewData["LibrarySection"] as string ?? string.Empty;
+    var opensReviewModal = string.Equals(librarySection, "review", StringComparison.OrdinalIgnoreCase);
+    var score = RecommendationViewHelper.GetDisplayMatchScore(Model);
+    var detailUrl = Url.Action("Details", "Movies", new { id = Model.Id }) ?? "#";
+    var reviewReturnUrl = detailUrl;
+    var reviewTabUrl = Url.Action("Index", "Movies", new { section = "review" }) ?? "/Movies?section=review";
+    var trailerQuery = string.IsNullOrWhiteSpace(Model.Title)
+        ? string.Empty
+        : $"{Model.Title}{(Model.Year.HasValue ? $" {Model.Year.Value}" : string.Empty)} trailer";
+    var trailerUrl = string.IsNullOrWhiteSpace(trailerQuery)
+        ? "https://www.youtube.com"
+        : $"https://www.youtube.com/results?search_query={System.Net.WebUtility.UrlEncode(trailerQuery)}";
+    var isWatched = Model.WatchedStatus == WatchedStatus.Watched;
+    var watchActionReturnUrl = $"{Context.Request.Path}{Context.Request.QueryString}";
+    var primaryGenre = RecommendationViewHelper.SplitCsv(Model.GenresCsv).FirstOrDefault() ?? "No genre";
+    var metaLine = Model.Year.HasValue ? $"{primaryGenre} • {Model.Year.Value}" : primaryGenre;
+    var imdbLine = $"IMDb {(Model.ImdbRating?.ToString("0.0") ?? "-")}";
+    var scoreLine = $"Match {score.ToString("0.#")}";
+    var watchToggleClass = isWatched ? "movie-card-status-toggle is-watched js-toggle-unwatched" : "movie-card-status-toggle is-unwatched js-open-watch-modal";
+    var watchToggleLabel = isWatched ? "Mark unwatched" : "Mark watched or review later";
+}
+
+<article class="movie-card discovery-card"
+         data-movie-card
+         data-movie-id="@Model.Id"
+         data-title="@Model.Title"
+         data-genre="@Model.GenresCsv"
+         data-watched="@(isWatched ? "watched" : "unwatched")"
+         data-primary-verdict="@(Model.PrimaryVerdict?.ToString() ?? string.Empty)"
+         data-reason-tags="@RecommendationViewHelper.JoinCsv(RecommendationViewHelper.SplitCsv(Model.NormalizedTagsCsv ?? Model.ReasonTagsCsv))">
+    <div class="movie-card-media">
+        <a class="movie-card-poster-link"
+           href="@detailUrl">
+            @if (!string.IsNullOrWhiteSpace(Model.PosterUrl))
+            {
+                <img class="movie-thumb" src="@Model.PosterUrl" alt="Poster for @Model.Title" loading="lazy" />
+            }
+            else
+            {
+                <div class="movie-thumb placeholder">
+                    <div class="placeholder-title">@Model.Title</div>
+                    <div class="placeholder-year">@(Model.Year?.ToString() ?? "Unknown year")</div>
+                </div>
+            }
+        </a>
+        <button class="@watchToggleClass"
+                type="button"
+                aria-label="@watchToggleLabel"
+                title="@watchToggleLabel"
+                data-movie-id="@Model.Id"
+                data-movie-title="@Model.Title"
+                data-movie-genre="@Model.GenresCsv"
+                data-movie-genre-display="@primaryGenre"
+                data-primary-verdict="@(Model.PrimaryVerdict?.ToString() ?? string.Empty)"
+                data-reason-tags="@RecommendationViewHelper.JoinCsv(RecommendationViewHelper.SplitCsv(Model.NormalizedTagsCsv ?? Model.ReasonTagsCsv))"
+                data-return-url="@watchActionReturnUrl"
+                data-review-tab-url="@reviewTabUrl"
+                data-watched="@(isWatched ? "watched" : "unwatched")">
+            <span aria-hidden="true">V</span>
+        </button>
+    </div>
+
+    <div class="movie-card-body compact-body">
+        <div class="movie-card-title-frame">
+            <h3 class="movie-card-title">
+                <a class="movie-card-title-link" href="@detailUrl">@Model.Title</a>
+            </h3>
+        </div>
+
+        <div class="movie-card-meta-line">
+            @primaryGenre@if (Model.Year.HasValue)
+            {
+                <text> - @Model.Year.Value</text>
+            }
+        </div>
+
+        <div class="movie-card-score-line">
+            <span class="movie-card-score-chip">@imdbLine</span>
+            <span class="movie-card-score-chip movie-card-score-chip--accent">@scoreLine</span>
+        </div>
+
+        <div class="card-actions compact-card-actions movie-card-actions">
+            <div class="movie-card-action-group">
+                <a class="button small js-open-watch-modal"
+                   href="@detailUrl"
+                   data-movie-id="@Model.Id"
+                   data-movie-title="@Model.Title"
+                   data-movie-genre="@Model.GenresCsv"
+                   data-movie-genre-display="@primaryGenre"
+                   data-primary-verdict="@(Model.PrimaryVerdict?.ToString() ?? string.Empty)"
+                   data-reason-tags="@RecommendationViewHelper.JoinCsv(RecommendationViewHelper.SplitCsv(Model.NormalizedTagsCsv ?? Model.ReasonTagsCsv))"
+                   data-return-url="@reviewReturnUrl"
+                   data-review-tab-url="@reviewTabUrl"
+                   data-watched="@(isWatched ? "watched" : "unwatched")">Review</a>
+                <a class="button small" href="@trailerUrl" target="_blank" rel="noopener">Trailer</a>
+            </div>
+        </div>
+    </div>
+</article>

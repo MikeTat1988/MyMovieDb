@@ -1,0 +1,146 @@
+we finished reviewing
+
+**Overall**
+The app already has a strong core idea, but right now the UX still behaves too much like a general-purpose movie database with recommendation features attached. Your intended product is sharper: a personal decision engine for what to watch next, with a feedback loop that continuously improves the model from your ratings and tags.
+
+The biggest UX mismatch today is hierarchy. The current home screen leads with stats and generic structure, while the real value lives lower on the page in the suggestions. The revised product should lead with action and recommendation confidence, not with database framing.
+
+**Validated Product Direction**
+The product should center on three top-level destinations:
+- `Best Match`
+- `Surprise me`
+- `Library`
+
+`Best Match` should open ready-to-use, using the user’s default genre from settings. For your current defaults, that genre is `Horror`. It should show a tight curated set: 4 movies for the selected genre, excluding dismissed items and review-needed items.
+
+`Surprise me` should pull from the full pool of unwatched, non-dismissed, non-review items across the whole library. It should feel playful and clean, not mixed with uncertain or incomplete entries.
+
+`Library` should become the operational workspace. Its internal sections should be:
+- `Not watched`
+- `Watched`
+- `Review`
+- `Dismissed`
+
+`Review` is a single inbox, not split into separate pages. It should contain:
+- watched movies missing tags
+- low-match movies suggested for dismissal
+
+These should be distinguished with clear badges like `Needs tags` and `Suggested dismiss`, with `Needs tags` shown first by default.
+
+**Core UX Decisions We Locked**
+Home and suggestion cards should stay visually clean. On main recommendation surfaces, each movie card should show only:
+- poster
+- genre
+- app score / match
+- IMDb score
+- trailer button
+
+Opening a movie should lead to a detail page where the explanation appears below the poster and a short summary. That explanation should be a compact decision table, not a long wall of text.
+
+The decision table should compare meaningful parameters, especially:
+- IMDb
+- genre
+- app taste learning
+- story
+- cinematography
+
+And where possible, it should compare the current movie against the weakest examples you still liked, so the explanation becomes decision-grade rather than abstract.
+
+**Feedback Loop**
+When marking a movie as watched, the app should open a modal. The score is required and should use a direct `0-100` scale. Tags are optional at that moment and can be completed later. Instead of dropdowns, the modal should use a responsive pressable tag picker where the user can choose up to 4 tags.
+
+After save:
+- the movie should move immediately to `Watched`
+- recommendations should update accordingly
+
+If the app’s predicted score meaningfully differs from the user’s final score, show a lightweight popup. If the prediction was close enough, show nothing. The trigger should be controlled by a configurable threshold, with a sensible default like `20` points on the `0-100` scale.
+
+**Dismissal Model**
+Dismissal is not “not for now.” It is an archive state for low-fit titles. Dismissed movies should:
+- stay in the DB
+- be hidden from normal recommendation surfaces
+- be hidden from default library browsing
+- remain visible under `Library > Dismissed`
+
+Dismissal should also be available from the movie detail page through a modal, similar in interaction style to the watched modal. The reasoning should come from the user’s review interaction rather than a rigid extra reason dropdown.
+
+**Settings**
+A small gear icon should sit on the top-right of the main control line.
+
+Settings should have two layers:
+- `Simple`
+- `Advanced`
+
+Both should use sliders for a more engaging UX.
+
+`Simple` should include things like:
+- default suggested genre
+- high-level scoring priorities
+
+`Advanced` should expose the full model parameters currently used by the system, with defaults tuned to your current taste assumptions.
+
+Settings changes should not apply live to the whole app immediately. Instead:
+- the screen should preview score changes live on one movie
+- the preview movie should come from the largest prediction-vs-actual mismatch first
+- it should be selected from your own unwatched or mismatch-relevant library context as discussed
+- a `Randomize` button should let you preview other eligible examples
+- only pressing `Apply` should update the app globally
+
+This turns settings into a calibration tool, not just a preferences form.
+
+**Import / Export**
+`Add movie` should stay visible in `Library`.
+`Import` should move into settings because it is infrequent.
+
+Import must remain additive and must not overwrite existing data destructively.
+
+Settings should also expose `Export CSV`, and the export should include all movies, including dismissed ones. The exported fields should mirror the same factors shown in the movie review / explanation table, so external LLM analysis sees the same decision inputs the app shows to the user.
+
+**Structured UI/UX Review**
+Strengths:
+- Strong core concept: personal taste-guided movie selection
+- Poster-first browsing is the right default
+- Real-time score evolution is valuable and should remain visible
+- The app’s learning loop can become a major differentiator
+
+Main UX issues:
+- Home screen hierarchy hides the main value below the fold
+- Current navigation reflects CRUD/database structure more than decision-making
+- Recommendation surfaces expose too much low-value/noisy preview information
+- Review-required items and active suggestions are not separated cleanly enough
+- Settings and calibration are not yet presented as part of the product’s intelligence
+
+Design direction:
+- lead with decision flows, not database framing
+- separate active recommendations from review work
+- keep recommendation cards minimal and confidence-building
+- move deeper reasoning into detail pages and modals
+- make the model tunable, inspectable, and learnable by the user
+
+**Implementation-Ready Improvement List**
+1. Replace top navigation with `Best Match`, `Surprise me`, and `Library`.
+2. Move `Add movie` into `Library` as the main visible action.
+3. Move `Import` into settings and keep it additive-only.
+4. Add `Export CSV` in settings using the same fields shown in the movie review decision table.
+5. Rework home into `Best Match` using the user’s default genre and showing exactly 4 titles.
+6. Set your current default genre to `Horror`.
+7. Build `Surprise me` from unwatched, non-dismissed, non-review items across the whole library.
+8. Restructure `Library` into `Not watched`, `Watched`, `Review`, and `Dismissed`.
+9. Make `Review` a single inbox with badges for `Needs tags` and `Suggested dismiss`.
+10. Prioritize `Needs tags` above `Suggested dismiss` in the review inbox.
+11. Simplify recommendation cards to poster, genre, app match, IMDb, and trailer.
+12. Move explanation logic to the movie detail page below poster and short summary.
+13. Add a compact decision table comparing score-driving factors, including taste-learning signals.
+14. Add a `Watched` modal with required `0-100` score and optional pressable 4-tag picker.
+15. Move watched movies immediately out of recommendation pools after save.
+16. Add mismatch popup logic with configurable threshold and default around `20`.
+17. Add dismissal state and `Dismissed` library section.
+18. Add dismiss action on movie detail page with modal flow.
+19. Add top-right gear settings entry.
+20. Create `Simple` and `Advanced` settings layers with slider-based UI.
+21. Add live score preview in settings using the biggest prediction mismatch first.
+22. Add `Randomize` preview movie action in settings.
+23. Apply setting changes appwide only after explicit `Apply`.
+24. Exclude review items from `Best Match` and `Surprise me` by default.
+
+If you want, next step I can turn this into a clean implementation plan grouped by screens, data/model changes, and rollout order before we start building.

@@ -1,0 +1,162 @@
+@using LocalMovieVault.Web.Helpers
+@model MovieEditViewModel
+@{
+    var selectedReasonTags = new HashSet<string>(Model.SelectedReasonTags ?? [], StringComparer.OrdinalIgnoreCase);
+}
+
+<div class="form-grid">
+    <div>
+        <label asp-for="Title"></label>
+        <input asp-for="Title" />
+        <span asp-validation-for="Title" class="validation"></span>
+    </div>
+
+    <div>
+        <label asp-for="OriginalTitle"></label>
+        <input asp-for="OriginalTitle" />
+    </div>
+
+    <div>
+        <label asp-for="Year"></label>
+        <input asp-for="Year" />
+    </div>
+
+    <div>
+        <label asp-for="GenresCsv"></label>
+        <input asp-for="GenresCsv" />
+    </div>
+
+    <div>
+        <label asp-for="MediaType"></label>
+        <select asp-for="MediaType" asp-items="Html.GetEnumSelectList<MediaType>()"></select>
+    </div>
+
+    <div>
+        <label asp-for="UserGrade"></label>
+        <select asp-for="UserGrade">
+            <option value="">Not graded</option>
+            @foreach (var option in RecommendationViewHelper.GradeOptions)
+            {
+                <option value="@option.Grade">@option.Label</option>
+            }
+        </select>
+    </div>
+
+    <div class="span-2">
+        <label>Normalized tags</label>
+        <div class="field-help">Pick the clean training tags you want to keep. Leave empty and check review-needed if you only want to keep the grade for now.</div>
+        <div class="tag-picker-grid" data-max-tags="@RecommendationViewHelper.MaxReasonTags">
+            @foreach (var tag in RecommendationViewHelper.ReasonTagOptions)
+            {
+                <label class="reason-check @(selectedReasonTags.Contains(tag) ? "is-active" : string.Empty)">
+                    <input type="checkbox" name="SelectedReasonTags" value="@tag" checked="@selectedReasonTags.Contains(tag)" />
+                    <span>@tag</span>
+                </label>
+            }
+        </div>
+    </div>
+
+    <div>
+        <label asp-for="ImdbRating"></label>
+        <input asp-for="ImdbRating" />
+    </div>
+
+    <div>
+        <label asp-for="ImdbVotes"></label>
+        <input asp-for="ImdbVotes" />
+    </div>
+
+    <div>
+        <label asp-for="Metascore"></label>
+        <input asp-for="Metascore" />
+    </div>
+
+    <div>
+        <label asp-for="RuntimeMinutes"></label>
+        <input asp-for="RuntimeMinutes" />
+    </div>
+
+    <div>
+        <label asp-for="ReleasedOn"></label>
+        <input asp-for="ReleasedOn" />
+    </div>
+
+    <div>
+        <label asp-for="WatchedStatus"></label>
+        <select asp-for="WatchedStatus">
+            <option value="@WatchedStatus.NotWatched">Not watched</option>
+            <option value="@WatchedStatus.Watched">Watched</option>
+        </select>
+    </div>
+
+    <div>
+        <label asp-for="Country"></label>
+        <input asp-for="Country" />
+    </div>
+
+    <div>
+        <label asp-for="Language"></label>
+        <input asp-for="Language" />
+    </div>
+
+    <div>
+        <label asp-for="Director"></label>
+        <input asp-for="Director" />
+    </div>
+
+    <div>
+        <label asp-for="Writer"></label>
+        <input asp-for="Writer" />
+    </div>
+
+    <div class="span-2">
+        <label asp-for="Actors"></label>
+        <input asp-for="Actors" />
+    </div>
+
+    <div class="span-2">
+        <label asp-for="PosterUrl"></label>
+        <input asp-for="PosterUrl" />
+    </div>
+
+    <div class="span-2">
+        <label asp-for="Overview"></label>
+        <textarea asp-for="Overview" rows="5"></textarea>
+    </div>
+
+    <div class="span-2">
+        <label asp-for="Notes"></label>
+        <textarea asp-for="Notes" rows="4"></textarea>
+    </div>
+
+    <div>
+        <label asp-for="UserRating"></label>
+        <select asp-for="UserRating">
+            <option value="">-</option>
+            @for (var rating = 1; rating <= 10; rating++)
+            {
+                <option value="@rating">@rating</option>
+            }
+        </select>
+    </div>
+
+    <div>
+        <label asp-for="NeedsTagReview">Review needed</label>
+        <input asp-for="NeedsTagReview" type="checkbox" />
+    </div>
+
+    <div class="span-2">
+        <label asp-for="TagsCsv"></label>
+        <input asp-for="TagsCsv" />
+    </div>
+
+    <input asp-for="Category" type="hidden" />
+    <input asp-for="ExternalSource" type="hidden" />
+    <input asp-for="ExternalId" type="hidden" />
+    <input asp-for="OmdbType" type="hidden" />
+    <input asp-for="OmdbRatingsJson" type="hidden" />
+    <input asp-for="TmdbId" type="hidden" />
+    <input asp-for="TmdbKeywordsCsv" type="hidden" />
+    <input asp-for="SimilarTitlesJson" type="hidden" />
+    <input asp-for="ExternalRatingsJson" type="hidden" />
+</div>

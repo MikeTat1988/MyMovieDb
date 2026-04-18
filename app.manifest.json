@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "2",
+  "id": "mymoviedb",
+  "name": "MyMovieDB",
+  "version": "9.0.0-masterapp.8",
+  "appType": "source",
+  "build": {
+    "installCommand": "dotnet publish ./src/LocalMovieVault.Web/LocalMovieVault.Web.csproj -c Release -o ./build/LocalMovieVault.Web",
+    "workingDirectory": "."
+  },
+  "publish": {
+    "command": "dotnet publish ./src/LocalMovieVault.Web/LocalMovieVault.Web.csproj -c Release -o ./build/LocalMovieVault.Web",
+    "workingDirectory": ".",
+    "outputPath": "build/LocalMovieVault.Web",
+    "preferSingleFile": false,
+    "createZip": true
+  },
+  "launch": {
+    "kind": "webApp",
+    "executablePath": "build/LocalMovieVault.Web/LocalMovieVault.Web.exe",
+    "workingDirectory": "build/LocalMovieVault.Web",
+    "arguments": [],
+    "environmentVariables": {
+      "MASTERAPP_PORT": "5277",
+      "MASTERAPP_HOSTED": "1",
+      "AppHost__AutoLaunchBrowser": "false"
+    },
+    "port": 5277,
+    "urlTemplate": "http://127.0.0.1:{port}/",
+    "healthPath": "/api/health",
+    "startupTimeoutSeconds": 60
+  },
+  "display": {
+    "shortName": "MyMovieDB",
+    "storeVisible": true,
+    "showInLibrary": true
+  }
+}

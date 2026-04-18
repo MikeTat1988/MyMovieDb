@@ -1,0 +1,29 @@
+# Build outputs
+build/
+bin/
+obj/
+
+# IDE and local tooling
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Logs and temporary artifacts
+logs/
+*.tmp
+*.temp
+
+# Test and review scratch outputs
+build/screenshot-review/
+build/screenshot-review-2/
+build/shot-review/
+
+# Local runtime data and copied package artifacts
+src/LocalMovieVault.Web/App_Data/localmovievault.db
+src/LocalMovieVault.Web/App_Data/localmovievault.db-*
+src/LocalMovieVault.Web/App_Data/Seed/seed_movies.json.bak
+
+# OS files
+Thumbs.db
+Desktop.ini

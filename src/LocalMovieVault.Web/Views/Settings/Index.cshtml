@@ -1,0 +1,91 @@
+@model AppSettingsViewModel
+@{
+    ViewData["Title"] = "Settings";
+}
+
+<section class="panel settings-shell">
+    <div class="panel-header library-header">
+        <div>
+            <div class="eyebrow">Calibration</div>
+            <h1>Settings</h1>
+            <div class="panel-subtitle">Tune the scoring model, set thresholds, import additive data, and export the full decision dataset.</div>
+        </div>
+        <div class="toolbar">
+            <form asp-action="ExportCsv" method="post">
+                @Html.AntiForgeryToken()
+                <button class="button" type="submit">Export CSV</button>
+            </form>
+            <a class="button subtle" asp-action="Diagnostics">Diagnostics</a>
+            <a class="button subtle" asp-controller="Import" asp-action="Index">Import</a>
+        </div>
+    </div>
+
+    <form asp-action="Save" method="post" id="settingsForm" class="stack-form settings-form">
+        @Html.AntiForgeryToken()
+        <section class="settings-panel">
+            <div class="slider-grid taste-priorities-grid">
+                <div>
+                    <label for="tastePriority1">Priority 1</label>
+                    <select id="tastePriority1" name="TastePrioritySelections[0]" data-taste-priority-select>
+                        <option value="">None</option>
+                        @foreach (var tag in Model.ImportantTagOptions)
+                        {
+                            <option value="@tag" selected="@(string.Equals(Model.TastePrioritySelections[0], tag, StringComparison.OrdinalIgnoreCase))">@tag</option>
+                        }
+                    </select>
+                </div>
+                <div>
+                    <label for="tastePriority2">Priority 2</label>
+                    <select id="tastePriority2" name="TastePrioritySelections[1]" data-taste-priority-select>
+                        <option value="">None</option>
+                        @foreach (var tag in Model.ImportantTagOptions)
+                        {
+                            <option value="@tag" selected="@(string.Equals(Model.TastePrioritySelections[1], tag, StringComparison.OrdinalIgnoreCase))">@tag</option>
+                        }
+                    </select>
+                </div>
+                <div>
+                    <label for="tastePriority3">Priority 3</label>
+                    <select id="tastePriority3" name="TastePrioritySelections[2]" data-taste-priority-select>
+                        <option value="">None</option>
+                        @foreach (var tag in Model.ImportantTagOptions)
+                        {
+                            <option value="@tag" selected="@(string.Equals(Model.TastePrioritySelections[2], tag, StringComparison.OrdinalIgnoreCase))">@tag</option>
+                        }
+                    </select>
+                </div>
+                <div>
+                    <label for="tastePriority4">Priority 4</label>
+                    <select id="tastePriority4" name="TastePrioritySelections[3]" data-taste-priority-select>
+                        <option value="">None</option>
+                        @foreach (var tag in Model.ImportantTagOptions)
+                        {
+                            <option value="@tag" selected="@(string.Equals(Model.TastePrioritySelections[3], tag, StringComparison.OrdinalIgnoreCase))">@tag</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            <div class="section-block taste-priorities-block">
+                <h3>Taste Priorities</h3>
+                <div class="field-help">Choose up to 4 tags that matter most to you. These tags will influence recommendation predictions more strongly.</div>
+            </div>
+        </section>
+
+        @if (Model.PreviewMovie is not null)
+        {
+            <input type="hidden" name="previewMovieId" value="@Model.PreviewMovie.Id" />
+        }
+
+        <div id="settingsPreviewHost">
+            <partial name="_SettingsPreviewCard" model="Model" />
+        </div>
+
+        <div class="toolbar">
+            <button class="button primary" type="submit" id="settingsApplyButton">Apply</button>
+            @if (Model.PreviewMovie is not null)
+            {
+                <button class="button" type="button" id="settingsRandomizeButton" data-randomize-url="@Url.Action("Index", "Settings")">Randomize</button>
+            }
+        </div>
+    </form>
+</section>

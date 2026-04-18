@@ -1,0 +1,99 @@
+@using LocalMovieVault.Web.Helpers
+<div class="modal-backdrop app-modal is-hidden" id="watchFeedbackModal" aria-hidden="true">
+    <div class="modal-panel modal-panel-narrow">
+        <div class="panel-header compact-header-gap">
+            <div>
+                <div class="eyebrow">Watched feedback</div>
+                <h2 id="watchFeedbackTitle">Mark watched</h2>
+                <div class="panel-subtitle">Pick a grade and up to @RecommendationViewHelper.MaxReasonTags tags that explain it.</div>
+            </div>
+            <button type="button" class="button subtle js-close-modal">Close</button>
+        </div>
+
+        <form asp-controller="Movies" asp-action="CompleteWatch" method="post" id="watchFeedbackForm" class="stack-form">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="id" id="watchFeedbackMovieId" />
+            <input type="hidden" name="returnUrl" id="watchFeedbackReturnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+            <input type="hidden" id="watchFeedbackReviewTabUrl" value="@Url.Action("Index", "Movies", new { section = "review" })" />
+            <div>
+                <label for="watchFeedbackVerdict">Your grade</label>
+                <select id="watchFeedbackVerdict" name="primaryVerdict" required>
+                    <option value="">Choose a grade</option>
+                    @foreach (var option in RecommendationViewHelper.VerdictOptions)
+                    {
+                        <option value="@option.Verdict">@option.Label</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label>Pick up to @RecommendationViewHelper.MaxReasonTags tags</label>
+                <div class="field-help">Use @RecommendationViewHelper.StandardMinReasonTags-@RecommendationViewHelper.MaxReasonTags tags for Loved, Liked, and Meh. Use at least @RecommendationViewHelper.AbandonedMinReasonTags for Couldn't finish.</div>
+                <div class="tag-picker-sections" data-max-tags="@RecommendationViewHelper.MaxReasonTags">
+                    <section class="tag-picker-section is-hidden" data-tag-section="genre">
+                        <div class="tag-picker-heading">Genre tags</div>
+                        <div class="tag-picker-grid">
+                            @foreach (var tag in RecommendationViewHelper.ReasonTagDefinitions.Where(x => x.Genres is not null && x.Genres.Count > 0))
+                            {
+                                <label class="reason-check is-hidden"
+                                       data-tag-kind="genre"
+                                       data-tag-label="@tag.Label"
+                                       data-tag-genres="@string.Join("|", tag.Genres!)">
+                                    <input type="checkbox" name="reasonTags" value="@tag.Label" />
+                                    <span>@tag.Label</span>
+                                </label>
+                            }
+                        </div>
+                    </section>
+                    <section class="tag-picker-section" data-tag-section="general">
+                        <div class="tag-picker-heading">General tags</div>
+                        <div class="tag-picker-grid">
+                            @foreach (var tag in RecommendationViewHelper.GetGeneralReasonTagDefinitions())
+                            {
+                                <label class="reason-check" data-tag-kind="general" data-tag-label="@tag.Label">
+                                    <input type="checkbox" name="reasonTags" value="@tag.Label" />
+                                    <span>@tag.Label</span>
+                                </label>
+                            }
+                        </div>
+                    </section>
+                </div>
+            </div>
+            <div class="modal-action-row">
+                <button class="button primary" type="submit">Save watched feedback</button>
+                <button class="button subtle is-hidden" type="button" id="watchFeedbackReviewLater">Review later</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-backdrop app-modal is-hidden" id="dismissMovieModal" aria-hidden="true">
+    <div class="modal-panel modal-panel-narrow">
+        <div class="panel-header compact-header-gap">
+            <div>
+                <div class="eyebrow">Dismiss movie</div>
+                <h2 id="dismissMovieTitle">Dismiss title</h2>
+                <div class="panel-subtitle">Dismissed movies stay in the database but disappear from suggestions and default library browsing.</div>
+            </div>
+            <button type="button" class="button subtle js-close-modal">Close</button>
+        </div>
+
+        <form asp-controller="Movies" asp-action="Dismiss" method="post" id="dismissMovieForm" class="stack-form">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="id" id="dismissMovieId" />
+            <input type="hidden" name="returnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+            <div>
+                <label>Why dismiss it?</label>
+                <div class="tag-picker-grid" data-max-tags="@RecommendationViewHelper.MaxReasonTags">
+                    @foreach (var tag in RecommendationViewHelper.ReasonTagOptions)
+                    {
+                        <label class="reason-check">
+                            <input type="checkbox" name="reasonTags" value="@tag" />
+                            <span>@tag</span>
+                        </label>
+                    }
+                </div>
+            </div>
+            <button class="button danger" type="submit">Confirm dismissal</button>
+        </form>
+    </div>
+</div>

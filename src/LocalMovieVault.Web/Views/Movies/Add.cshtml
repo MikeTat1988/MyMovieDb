@@ -1,0 +1,227 @@
+@model AddMoviePageViewModel
+@{
+    ViewData["Title"] = "Добавить";
+}
+
+<section class="panel add-shell">
+    <div class="panel-header compact-header-gap">
+        <div>
+            <div class="eyebrow">Поиск по интернет-данным</div>
+            <h1>Добавить фильм</h1>
+            <div class="panel-subtitle">Сначала найди название, потом выбери правильный вариант и сохрани.</div>
+        </div>
+    </div>
+
+    <form asp-action="Lookup" method="post" class="lookup-form-simple">
+        @Html.AntiForgeryToken()
+        <div asp-validation-summary="ModelOnly" class="alert error"></div>
+        <div class="lookup-fields-row">
+            <div class="lookup-title-field">
+                <label asp-for="LookupTitle">Название</label>
+                <input asp-for="LookupTitle" placeholder="Например: Pandorum" />
+            </div>
+            <div class="lookup-year-field">
+                <label asp-for="LookupYear">Год</label>
+                <select asp-for="LookupYear">
+                    @for (var year = 2026; year >= 1900; year--)
+                    {
+                        <option value="@year" selected="@(Model.LookupYear == year)">@year</option>
+                    }
+                </select>
+            </div>
+            <div class="lookup-submit-field">
+                <button class="button primary lookup-submit" type="submit">Подтянуть</button>
+            </div>
+        </div>
+    </form>
+
+    @if (!string.IsNullOrWhiteSpace(Model.LookupMessage))
+    {
+        <div class="alert @(Model.ShowSavePopup ? "success" : "info")">@Model.LookupMessage</div>
+    }
+</section>
+
+@if (Model.Candidates.Count > 1)
+{
+    <section class="panel add-choice-shell">
+        <div class="panel-header compact-header-gap">
+            <div>
+                <div class="eyebrow">Несколько вариантов</div>
+                <h2>Выбери правильный</h2>
+            </div>
+        </div>
+        <div class="choice-grid">
+            @foreach (var candidate in Model.Candidates)
+            {
+                <article class="choice-card @(candidate.ImdbId == Model.SelectedImdbId ? "is-selected" : string.Empty)">
+                    <div class="choice-poster-wrap">
+                        @if (!string.IsNullOrWhiteSpace(candidate.PosterUrl))
+                        {
+                            <img class="choice-poster" src="@candidate.PosterUrl" alt="Постер @candidate.Title" />
+                        }
+                        else
+                        {
+                            <div class="choice-poster placeholder">
+                                <div class="placeholder-title">@candidate.Title</div>
+                            </div>
+                        }
+                    </div>
+                    <div class="choice-body">
+                        <div class="choice-title">@candidate.Title</div>
+                        <div class="choice-meta">
+                            <span>@(candidate.Year?.ToString() ?? "—")</span>
+                            <span>@candidate.MediaType</span>
+                            @if (!string.IsNullOrWhiteSpace(candidate.GenresCsv))
+                            {
+                                <span>@candidate.GenresCsv</span>
+                            }
+                        </div>
+                        <div class="metric-row compact-metrics">
+                            <span class="metric-chip">IMDb @(candidate.ImdbRating?.ToString("0.0") ?? "—")</span>
+                            @if (candidate.RuntimeMinutes.HasValue)
+                            {
+                                <span class="metric-chip">@candidate.RuntimeMinutes мин</span>
+                            }
+                        </div>
+                    </div>
+                    <form asp-action="ChooseCandidate" method="post" class="choice-select-form">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="imdbId" value="@candidate.ImdbId" />
+                        <input type="hidden" name="lookupTitle" value="@Model.LookupTitle" />
+                        <input type="hidden" name="lookupYear" value="@Model.LookupYear" />
+                        <button class="button small @(candidate.ImdbId == Model.SelectedImdbId ? "primary" : string.Empty)" type="submit">Это оно</button>
+                    </form>
+                </article>
+            }
+        </div>
+    </section>
+}
+
+@if (Model.ShowSavePopup)
+{
+    <section class="panel add-result-shell">
+        <div class="add-result-grid">
+            <div class="add-poster-col">
+                @if (!string.IsNullOrWhiteSpace(Model.Movie.PosterUrl))
+                {
+                    <img class="lookup-poster" src="@Model.Movie.PosterUrl" alt="Постер @Model.Movie.Title" />
+                }
+                else
+                {
+                    <div class="lookup-poster placeholder">
+                        <div class="placeholder-title">@Model.Movie.Title</div>
+                        @if (Model.Movie.Year.HasValue)
+                        {
+                            <div class="placeholder-year">@Model.Movie.Year</div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="add-main-col">
+                <div class="add-summary">
+                    <div class="add-summary-title">@Model.Movie.Title</div>
+                    <div class="add-summary-meta">
+                        <span>@(Model.Movie.Year?.ToString() ?? "—")</span>
+                        <span>@Model.Movie.MediaType</span>
+                        @if (!string.IsNullOrWhiteSpace(Model.Movie.GenresCsv))
+                        {
+                            <span>@Model.Movie.GenresCsv</span>
+                        }
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-chip">IMDb @(Model.Movie.ImdbRating?.ToString("0.0") ?? "—")</span>
+                        @if (Model.Movie.RuntimeMinutes.HasValue)
+                        {
+                            <span class="metric-chip">@Model.Movie.RuntimeMinutes мин</span>
+                        }
+                    </div>
+                </div>
+
+                <form asp-action="Create" method="post" class="save-form-simple">
+                    <input asp-for="Movie.Category" type="hidden" />
+                    <input asp-for="Movie.ImdbRating" type="hidden" />
+                    <input asp-for="Movie.RuntimeMinutes" type="hidden" />
+                    <input asp-for="Movie.Country" type="hidden" />
+                    <input asp-for="Movie.Language" type="hidden" />
+                    <input asp-for="Movie.PosterUrl" type="hidden" />
+                    <input asp-for="Movie.Overview" type="hidden" />
+                    <input asp-for="Movie.ExternalSource" type="hidden" />
+                    <input asp-for="Movie.ExternalId" type="hidden" />
+                    <input asp-for="LookupTitle" type="hidden" />
+                    <input asp-for="LookupYear" type="hidden" />
+                    <input asp-for="SelectedImdbId" type="hidden" />
+                    <input asp-for="ShowSavePopup" type="hidden" value="true" />
+
+                    <div asp-validation-summary="ModelOnly" class="alert error"></div>
+
+                    <div class="simple-save-controls">
+                        <div>
+                            <label>Смотрел</label>
+                            <div class="segmented-control segmented-control-tight">
+                                <label class="segment-button @(Model.Movie.WatchedStatus == WatchedStatus.Watched ? "is-active" : string.Empty)">
+                                    <input type="radio" asp-for="Movie.WatchedStatus" value="@WatchedStatus.Watched" hidden />
+                                    Смотрел
+                                </label>
+                                <label class="segment-button @(Model.Movie.WatchedStatus != WatchedStatus.Watched ? "is-active" : string.Empty)">
+                                    <input type="radio" asp-for="Movie.WatchedStatus" value="@WatchedStatus.NotWatched" hidden />
+                                    Не смотрел
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="simple-rating-box">
+                            <label asp-for="Movie.UserRating">Моя оценка</label>
+                            <select asp-for="Movie.UserRating">
+                                <option value="">—</option>
+                                @for (var rating = 1; rating <= 10; rating++)
+                                {
+                                    <option value="@rating">@rating</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <details class="advanced-box">
+                        <summary>Advanced</summary>
+                        <div class="advanced-grid">
+                            <div>
+                                <label asp-for="Movie.Title"></label>
+                                <input asp-for="Movie.Title" />
+                            </div>
+                            <div>
+                                <label asp-for="Movie.OriginalTitle"></label>
+                                <input asp-for="Movie.OriginalTitle" />
+                            </div>
+                            <div>
+                                <label asp-for="Movie.Year"></label>
+                                <input asp-for="Movie.Year" />
+                            </div>
+                            <div>
+                                <label asp-for="Movie.MediaType"></label>
+                                <select asp-for="Movie.MediaType" asp-items="Html.GetEnumSelectList<MediaType>()"></select>
+                            </div>
+                            <div class="span-2">
+                                <label asp-for="Movie.GenresCsv"></label>
+                                <input asp-for="Movie.GenresCsv" />
+                            </div>
+                            <div class="span-2">
+                                <label asp-for="Movie.Notes"></label>
+                                <textarea asp-for="Movie.Notes" rows="3"></textarea>
+                            </div>
+                            <div class="span-2">
+                                <label asp-for="Movie.TagsCsv"></label>
+                                <input asp-for="Movie.TagsCsv" />
+                            </div>
+                        </div>
+                    </details>
+
+                    <div class="toolbar save-actions-row">
+                        <button class="button primary" type="submit">Сохранить</button>
+                        <a class="button" asp-action="Add">Сбросить</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </section>
+}

@@ -1,0 +1,148 @@
+@using LocalMovieVault.Web.Helpers
+@model MovieDetailsViewModel
+@{
+    ViewData["Title"] = Model.Movie.Title;
+    var movie = Model.Movie;
+    var isWatched = movie.WatchedStatus == LocalMovieVault.Web.Models.WatchedStatus.Watched;
+    var displayScore = RecommendationViewHelper.GetDisplayMatchScore(movie);
+}
+
+<section class="details-layout details-layout-reverse">
+    <div class="panel poster-panel">
+        @if (!string.IsNullOrWhiteSpace(movie.PosterUrl))
+        {
+            <img class="poster" src="@movie.PosterUrl" alt="Poster for @movie.Title" />
+        }
+        else
+        {
+            <div class="poster-placeholder">Poster not available</div>
+        }
+    </div>
+
+    <div class="panel">
+        <div class="panel-header details-top">
+            <div>
+                <div class="eyebrow">@Model.ReviewBadge</div>
+                <h1>@movie.Title</h1>
+                <div class="detail-hero-metrics">
+                    <div class="detail-hero-metric detail-hero-metric-accent">
+                        <div class="detail-hero-label">Match</div>
+                        <div class="detail-hero-value">@displayScore.ToString("0.#")</div>
+                    </div>
+                    <div class="detail-hero-metric">
+                        <div class="detail-hero-label">IMDb</div>
+                        <div class="detail-hero-value">@(movie.ImdbRating?.ToString("0.0") ?? "-")</div>
+                    </div>
+                </div>
+                <div class="detail-badges-row">
+                    <span class="metric-chip">@((movie.WatchedStatus == LocalMovieVault.Web.Models.WatchedStatus.Watched ? LocalMovieVault.Web.Helpers.RecommendationViewHelper.GetGradeLabel(movie.UserGrade) : movie.PredictedLabel ?? "Maybe"))</span>
+                </div>
+            </div>
+            <div class="toolbar">
+                @if (!movie.IsDismissed)
+                {
+                    @if (isWatched)
+                    {
+                        <button class="button primary js-open-watch-modal" type="button"
+                                data-movie-id="@movie.Id"
+                                data-movie-title="@movie.Title"
+                                data-movie-genre="@movie.GenresCsv"
+                                data-primary-verdict="@(movie.PrimaryVerdict?.ToString() ?? string.Empty)"
+                                data-reason-tags="@RecommendationViewHelper.JoinCsv(RecommendationViewHelper.SplitCsv(movie.NormalizedTagsCsv ?? movie.ReasonTagsCsv))"
+                                data-return-url="@Url.Action("Details", "Movies", new { id = movie.Id })">
+                            Review
+                        </button>
+                        <button class="button subtle js-toggle-unwatched" type="button"
+                                data-movie-id="@movie.Id"
+                                data-return-url="@Url.Action("Details", "Movies", new { id = movie.Id })">
+                            Mark unwatched
+                        </button>
+                    }
+                    else
+                    {
+                        <button class="button primary js-open-watch-modal" type="button"
+                                data-movie-id="@movie.Id"
+                                data-movie-title="@movie.Title"
+                                data-movie-genre="@movie.GenresCsv"
+                                data-primary-verdict="@(movie.PrimaryVerdict?.ToString() ?? string.Empty)"
+                                data-reason-tags="@RecommendationViewHelper.JoinCsv(RecommendationViewHelper.SplitCsv(movie.NormalizedTagsCsv ?? movie.ReasonTagsCsv))"
+                                data-return-url="@Url.Action("Details", "Movies", new { id = movie.Id })">
+                            Mark watched
+                        </button>
+                    }
+                    <button class="button danger js-open-dismiss-modal" type="button"
+                            data-movie-id="@movie.Id"
+                            data-movie-title="@movie.Title">
+                        Dismiss
+                    </button>
+                }
+                else
+                {
+                    <form asp-action="Restore" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@movie.Id" />
+                        <button class="button" type="submit">Restore</button>
+                    </form>
+                }
+                <a class="button" asp-action="Edit" asp-route-id="@movie.Id">Full edit</a>
+            </div>
+        </div>
+
+        <div class="prediction-panel">
+            <div>
+                <div class="prediction-label">Short summary</div>
+                <div class="prediction-text">@((movie.PredictedReason ?? "Prediction will improve as you review more watched titles."))</div>
+            </div>
+        </div>
+
+        <div class="section-block">
+            <h3>Decision table</h3>
+            <table class="decision-table">
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Current grade</th>
+                        <th>Weakest liked benchmark</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in Model.DecisionRows)
+                    {
+                        <tr>
+                            <td>@row.Parameter</td>
+                            <td>@row.CurrentGrade</td>
+                            <td>@row.Benchmark</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section-block">
+            <h3>Metadata</h3>
+            <dl class="detail-grid compact-detail-grid">
+                <dt>Genres</dt>
+                <dd>@(movie.GenresCsv ?? "-")</dd>
+                <dt>Runtime</dt>
+                <dd>@(movie.RuntimeMinutes.HasValue ? $"{movie.RuntimeMinutes} min" : "-")</dd>
+                <dt>Director</dt>
+                <dd>@(movie.Director ?? "-")</dd>
+                <dt>Actors</dt>
+                <dd>@(movie.Actors ?? "-")</dd>
+                <dt>Your score</dt>
+                <dd>@(movie.UserRating?.ToString("0.#") ?? "Not scored yet")</dd>
+                <dt>Your grade</dt>
+                <dd>@(LocalMovieVault.Web.Helpers.RecommendationViewHelper.GetGradeLabel(movie.UserGrade))</dd>
+                <dt>Feedback tags</dt>
+                <dd>@(movie.NormalizedTagsCsv ?? "Add tags from Review")</dd>
+            </dl>
+        </div>
+
+        <div class="section-block">
+            <h3>Story summary</h3>
+            <p>@(string.IsNullOrWhiteSpace(movie.Overview) ? "No overview yet." : movie.Overview)</p>
+        </div>
+    </div>
+</section>
+
+<partial name="_WatchFeedbackModal" />

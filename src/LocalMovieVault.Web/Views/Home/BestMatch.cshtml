@@ -1,0 +1,41 @@
+@model HomeDashboardViewModel
+@{
+    ViewData["Title"] = "Best Match";
+    ViewData["DismissScoreThreshold"] = 50m;
+}
+
+<section class="panel dashboard-shell">
+    <div class="section-head section-head-inline">
+        <div>
+            <h1 class="section-title">Best Match</h1>
+            <div class="section-subtitle">Eligible movies: <strong>@Model.TopMatches.Count</strong></div>
+        </div>
+        <form method="get" class="section-inline-form best-match-filter">
+            <div class="field-stack">
+                <label for="bestMatchGenre">Genre</label>
+                <select id="bestMatchGenre" name="genre" onchange="this.form.submit()">
+                    @foreach (var genre in Model.Genres)
+                    {
+                        <option value="@genre" selected="@(genre == Model.SelectedGenre)">@genre</option>
+                    }
+                </select>
+            </div>
+        </form>
+    </div>
+
+    @if (Model.TopMatches.Count == 0)
+    {
+        <div class="empty-state">No active matches yet for this genre. Try another genre or review more watched titles.</div>
+    }
+    else
+    {
+        <div class="movie-grid fixed-grid">
+            @foreach (var movie in Model.TopMatches)
+            {
+                <partial name="_DiscoveryCard" model="movie" />
+            }
+        </div>
+    }
+</section>
+
+<partial name="_WatchFeedbackModal" />

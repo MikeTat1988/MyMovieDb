@@ -1,0 +1,40 @@
+@model ImportPageViewModel
+@{
+    ViewData["Title"] = "Import";
+}
+
+<section class="panel">
+    <div class="panel-header">
+        <h1>Import Library Data</h1>
+    </div>
+
+    <p>There are currently <strong>@Model.ExistingCount</strong> records in the database.</p>
+    <p>Supported formats: <strong>.docx</strong>, <strong>.json</strong>, and the new additive <strong>.csv</strong> delta import.</p>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="alert success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="alert error">@Model.ErrorMessage</div>
+    }
+
+    <form asp-action="Upload" method="post" enctype="multipart/form-data" class="stack-form">
+        <div>
+            <label for="uploadFile">Import file</label>
+            <input id="uploadFile" name="uploadFile" type="file" accept=".docx,.json,.csv" />
+        </div>
+        <button class="button primary" type="submit">Import</button>
+    </form>
+
+    <div class="section-block">
+        <h3>Import behavior</h3>
+        <ul>
+            <li>Seed imports stay additive and avoid obvious duplicates.</li>
+            <li>CSV deltas only touch matched rows or add explicit review stubs from the file.</li>
+            <li>After import, the personal match model is recalculated immediately.</li>
+        </ul>
+    </div>
+</section>

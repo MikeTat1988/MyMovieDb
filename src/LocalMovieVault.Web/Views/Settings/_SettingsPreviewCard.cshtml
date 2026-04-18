@@ -1,0 +1,28 @@
+@model AppSettingsViewModel
+
+<section class="prediction-panel settings-preview-card">
+    <div>
+        <div class="prediction-label">Preview movie</div>
+        <div class="prediction-score" id="previewMovieScore">@Model.PreviewPredictedScore.ToString("0.#")</div>
+        <div class="prediction-label">Predicted score with priorities</div>
+    </div>
+    <div>
+        @if (Model.PreviewMovie is null)
+        {
+            <div class="prediction-text">@Model.PreviewStatusText</div>
+        }
+        else
+        {
+            <div class="prediction-label">@Model.PreviewMovie.Title</div>
+            <div class="prediction-text">
+                @Model.PreviewStatusText
+                <br />
+                Current score: @Model.PreviewCurrentPredictedScore.ToString("0.#")
+                <br />
+                Projected score: @Model.PreviewPredictedScore.ToString("0.#")
+                <br />
+                Your score: @(Model.PreviewMovie.UserRating?.ToString("0.#") ?? "Not scored")
+            </div>
+        }
+    </div>
+</section>
