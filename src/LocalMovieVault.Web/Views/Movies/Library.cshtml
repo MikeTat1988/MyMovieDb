@@ -6,68 +6,87 @@
     ViewData["LibrarySection"] = Model.Section;
 }
 
-<section class="panel library-shell">
-    <div class="panel-header library-header">
-        <div>
-            <h1 class="section-title">Library</h1>
+<section class="panel library-shell library-shell-polished">
+    <div class="library-layout">
+        <aside class="library-rail">
+            <div class="library-title-row">
+                <h1 class="section-title">Library</h1>
+                <span class="library-total-pill">@Model.TotalCount total</span>
+            </div>
             <div class="panel-subtitle">Browse active titles, watched history, review inbox, and dismissed movies.</div>
-        </div>
-        <div class="toolbar library-actions">
-            <a class="button primary" asp-action="Add">Add movie</a>
-        </div>
-    </div>
 
-    <div class="segmented-control library-tabs">
-        <a class="segment-button @(Model.Section == "not-watched" ? "is-active" : string.Empty)" asp-action="Index" asp-route-section="not-watched">Not watched</a>
-        <a class="segment-button @(Model.Section == "watched" ? "is-active" : string.Empty)" asp-action="Index" asp-route-section="watched">Watched</a>
-        <a class="segment-button @(Model.Section == "review" ? "is-active" : string.Empty)" asp-action="Index" asp-route-section="review">Review</a>
-        <a class="segment-button @(Model.Section == "dismissed" ? "is-active" : string.Empty)" asp-action="Index" asp-route-section="dismissed">Dismissed</a>
-    </div>
-
-    <form method="get" class="filter-stack library-filter-stack">
-        <input type="hidden" name="section" value="@Model.Section" />
-        <div class="filter-row filter-row-search">
-            <div class="filter-search-box">
-                <label for="query">Search</label>
-                <input id="query" type="text" name="query" value="@Model.Query" placeholder="Title, notes, tags..." />
+            <div class="toolbar library-actions library-actions-stacked">
+                <a class="button primary" asp-action="Add">Add movie</a>
             </div>
-            <div>
-                <label for="genre">Genre</label>
-                <select id="genre" name="genre">
-                    <option value="">All genres</option>
-                    @foreach (var genre in Model.Genres)
+
+            <div class="library-rail-label">Browse</div>
+            <div class="library-rail-tabs">
+                <a class="library-rail-tab @(Model.Section == "not-watched" ? "is-active" : string.Empty)" asp-action="Index" asp-route-section="not-watched">
+                    <span>Not watched</span>
+                    <span class="library-rail-count">@Model.NotWatchedCount</span>
+                </a>
+                <a class="library-rail-tab @(Model.Section == "watched" ? "is-active" : string.Empty)" asp-action="Index" asp-route-section="watched">
+                    <span>Watched</span>
+                    <span class="library-rail-count">@Model.WatchedCount</span>
+                </a>
+                <a class="library-rail-tab @(Model.Section == "review" ? "is-active" : string.Empty)" asp-action="Index" asp-route-section="review">
+                    <span>Review</span>
+                    <span class="library-rail-count">@Model.ReviewCount</span>
+                </a>
+                <a class="library-rail-tab @(Model.Section == "dismissed" ? "is-active" : string.Empty)" asp-action="Index" asp-route-section="dismissed">
+                    <span>Dismissed</span>
+                    <span class="library-rail-count">@Model.DismissedCount</span>
+                </a>
+            </div>
+        </aside>
+
+        <div class="library-main">
+            <form method="get" class="filter-stack library-filter-stack">
+                <input type="hidden" name="section" value="@Model.Section" />
+                <div class="filter-row filter-row-search">
+                    <div class="filter-search-box">
+                        <label for="query">Search</label>
+                        <input id="query" type="text" name="query" value="@Model.Query" placeholder="Title, notes, tags..." />
+                    </div>
+                    <div>
+                        <label for="genre">Genre</label>
+                        <select id="genre" name="genre">
+                            <option value="">All genres</option>
+                            @foreach (var genre in Model.Genres)
+                            {
+                                <option value="@genre" selected="@(genre == Model.Genre)">@genre</option>
+                            }
+                        </select>
+                    </div>
+                    <div>
+                        <label for="sortBy">Sort</label>
+                        <select id="sortBy" name="sortBy">
+                            <option value="personal" selected="@(Model.SortBy == "personal")">Match</option>
+                            <option value="title" selected="@(Model.SortBy == "title")">Title</option>
+                            <option value="imdb" selected="@(Model.SortBy == "imdb")">IMDb</option>
+                            <option value="user" selected="@(Model.SortBy == "user")">Your score</option>
+                            <option value="recent" selected="@(Model.SortBy == "recent")">Updated</option>
+                        </select>
+                    </div>
+                    <button class="button subtle" type="submit">Apply</button>
+                </div>
+            </form>
+
+            @if (Model.Movies.Count == 0)
+            {
+                <div class="empty-state">No movies found for this section yet.</div>
+            }
+            else
+            {
+                <section class="movie-grid fixed-grid" data-library-section="@Model.Section">
+                    @foreach (var movie in Model.Movies)
                     {
-                        <option value="@genre" selected="@(genre == Model.Genre)">@genre</option>
+                        <partial name="_DiscoveryCard" model="movie" />
                     }
-                </select>
-            </div>
-            <div>
-                <label for="sortBy">Sort</label>
-                <select id="sortBy" name="sortBy">
-                    <option value="personal" selected="@(Model.SortBy == "personal")">Match</option>
-                    <option value="title" selected="@(Model.SortBy == "title")">Title</option>
-                    <option value="imdb" selected="@(Model.SortBy == "imdb")">IMDb</option>
-                    <option value="user" selected="@(Model.SortBy == "user")">Your score</option>
-                    <option value="recent" selected="@(Model.SortBy == "recent")">Updated</option>
-                </select>
-            </div>
-            <button class="button subtle" type="submit">Apply</button>
+                </section>
+            }
         </div>
-    </form>
+    </div>
 </section>
-
-@if (Model.Movies.Count == 0)
-{
-    <div class="empty-state">No movies found for this section yet.</div>
-}
-else
-{
-    <section class="movie-grid fixed-grid" data-library-section="@Model.Section">
-        @foreach (var movie in Model.Movies)
-        {
-            <partial name="_DiscoveryCard" model="movie" />
-        }
-    </section>
-}
 
 <partial name="_WatchFeedbackModal" />

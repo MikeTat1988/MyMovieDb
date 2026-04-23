@@ -120,6 +120,20 @@ public static class RecommendationViewHelper
     public static decimal GetDisplayMatchScore(Movie movie)
         => movie.PredictedScore ?? movie.PersonalMatchScore ?? 0m;
 
+    public static bool HasCompletedReview(Movie movie)
+    {
+        if (movie.WatchedStatus != WatchedStatus.Watched ||
+            movie.NeedsTagReview ||
+            !movie.UserRating.HasValue ||
+            !movie.UserGrade.HasValue)
+        {
+            return false;
+        }
+
+        var tagCount = SplitCsv(movie.NormalizedTagsCsv ?? movie.ReasonTagsCsv).Count();
+        return tagCount >= GetMinimumReasonTags(movie.UserGrade);
+    }
+
     public static IReadOnlyList<ReasonTagDefinition> GetGeneralReasonTagDefinitions()
         => ReasonTagDefinitions.Where(x => x.Genres is null || x.Genres.Count == 0).ToList();
 

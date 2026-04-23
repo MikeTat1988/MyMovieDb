@@ -11,7 +11,7 @@ public static class RecommendationCatalog
     {
         [UserGrade.Loved] = 2,
         [UserGrade.Liked] = 1,
-        [UserGrade.Meh] = -1,
+        [UserGrade.Meh] = 0,
         [UserGrade.CouldntFinish] = -2
     };
 

@@ -13,6 +13,7 @@ builder.Logging.AddConsole();
 builder.Logging.AddDebug();
 
 var storageOptions = AppStorageBootstrapper.Initialize(builder.Environment.ContentRootPath, builder.Configuration);
+builder.Logging.AddProvider(new SizeLimitedFileLoggerProvider(storageOptions.LogPath, 10L * 1024L * 1024L));
 builder.Configuration.AddJsonFile(
     new PhysicalFileProvider(Path.GetDirectoryName(storageOptions.SettingsPath)!),
     Path.GetFileName(storageOptions.SettingsPath),
@@ -103,7 +104,13 @@ var isMasterAppHosted = string.Equals(Environment.GetEnvironmentVariable("MASTER
 var envAutoLaunch = Environment.GetEnvironmentVariable("AppHost__AutoLaunchBrowser");
 var autoLaunchBrowser = !isMasterAppHosted && (!string.IsNullOrWhiteSpace(envAutoLaunch)
     ? string.Equals(envAutoLaunch, "true", StringComparison.OrdinalIgnoreCase)
-    : app.Configuration.GetValue("AppHost:AutoLaunchBrowser", true));
+    : app.Configuration.GetValue("AppHost:AutoLaunchBrowser", false));
+
+app.Logger.LogInformation(
+    "AppHost startup: hosted={Hosted} autoLaunchBrowser={AutoLaunchBrowser} url={Url}",
+    isMasterAppHosted,
+    autoLaunchBrowser,
+    configuredUrl);
 
 if (autoLaunchBrowser)
 {
@@ -122,6 +129,10 @@ if (autoLaunchBrowser)
             // ignored by design
         }
     });
+}
+else
+{
+    app.Logger.LogInformation("Browser auto-launch is disabled for this run.");
 }
 
 app.Run();

@@ -7,11 +7,21 @@ using LocalMovieVault.Web.Services.Recommendations;
 using LocalMovieVault.Web.ViewModels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace LocalMovieVault.Web.Controllers;
 
 public class MoviesController : Controller
 {
+    private const decimal ImmediateMismatchSuggestionThreshold = 40m;
+    private const int RepeatedMismatchPromptMarks = 3;
+    private const int MismatchCooldownRatingCount = 5;
+    private static readonly TimeSpan MismatchCooldownDuration = TimeSpan.FromDays(14);
+    private static readonly JsonSerializerOptions RecommendationContextJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private readonly AppDbContext _dbContext;
     private readonly IMovieMetadataService _metadataService;
     private readonly MovieUpsertService _movieUpsertService;
@@ -44,6 +54,10 @@ public class MoviesController : Controller
         var preferences = _preferencesService.Get();
         var allMovies = await _dbContext.Movies.ToListAsync(cancellationToken);
         var genres = GenreHelper.CollectGenres(allMovies);
+        var notWatchedCount = allMovies.Count(x => x.WatchedStatus != WatchedStatus.Watched && !x.IsDismissed && !MovieStateHelper.NeedsReview(x, preferences.DismissScoreThreshold));
+        var watchedCount = allMovies.Count(x => x.WatchedStatus == WatchedStatus.Watched && !x.IsDismissed);
+        var reviewCount = allMovies.Count(x => MovieStateHelper.NeedsReview(x, preferences.DismissScoreThreshold));
+        var dismissedCount = allMovies.Count(x => x.IsDismissed);
 
         IEnumerable<Movie> movies = allMovies;
 
@@ -92,6 +106,11 @@ public class MoviesController : Controller
 
         var model = new MovieListViewModel
         {
+            TotalCount = allMovies.Count,
+            NotWatchedCount = notWatchedCount,
+            WatchedCount = watchedCount,
+            ReviewCount = reviewCount,
+            DismissedCount = dismissedCount,
             Section = section,
             Query = query,
             Genre = genre,
@@ -114,7 +133,46 @@ public class MoviesController : Controller
         }
 
         var preferences = _preferencesService.Get();
-        return View("MovieDetails", MovieDetailsViewModel.Create(movie, preferences.DismissScoreThreshold));
+        var referenceMovie = await ResolveReferenceMovieAsync(movie, cancellationToken);
+        return View("MovieDetails", MovieDetailsViewModel.Create(movie, preferences.DismissScoreThreshold, referenceMovie));
+    }
+
+    private async Task<Movie?> ResolveReferenceMovieAsync(Movie movie, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(movie.RecommendationContextJson))
+        {
+            return null;
+        }
+
+        RecommendationContext? context;
+        try
+        {
+            context = JsonSerializer.Deserialize<RecommendationContext>(movie.RecommendationContextJson, RecommendationContextJsonOptions);
+        }
+        catch
+        {
+            context = null;
+        }
+
+        var referenceTitle = context?.SimilarToLiked
+            .OrderByDescending(x => x.SimilarityScore)
+            .Select(x => x.Title)
+            .FirstOrDefault(x => !string.IsNullOrWhiteSpace(x));
+        if (string.IsNullOrWhiteSpace(referenceTitle))
+        {
+            return null;
+        }
+
+        var normalizedTitle = TitleNormalizer.Normalize(referenceTitle);
+        var candidates = await _dbContext.Movies
+            .Where(x => x.Id != movie.Id && x.NormalizedTitle == normalizedTitle)
+            .ToListAsync(cancellationToken);
+
+        return candidates
+            .OrderByDescending(x => x.WatchedStatus == WatchedStatus.Watched)
+            .ThenByDescending(x => x.UserRating ?? decimal.MinValue)
+            .ThenByDescending(x => x.PredictedScore ?? decimal.MinValue)
+            .FirstOrDefault();
     }
 
     [HttpGet]
@@ -246,10 +304,15 @@ public class MoviesController : Controller
             cancellationToken);
 
         var preferences = _preferencesService.Get();
+        preferences.CompletedRatingCount += 1;
         var mismatchValue = movie.PredictedScore.HasValue
             ? Math.Abs(movie.PredictedScore.Value - movie.UserRating.Value)
             : 0m;
         var showMismatch = mismatchValue >= preferences.PredictionMismatchThreshold;
+        var mismatchSuggestion = showMismatch
+            ? UpdateMismatchStateAndBuildPrompt(movie, preferences, mismatchValue)
+            : null;
+        _preferencesService.Save(preferences);
 
         if (IsAjaxRequest())
         {
@@ -266,6 +329,18 @@ public class MoviesController : Controller
                 mismatchValue = mismatchValue.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture),
                 predictedScore = movie.PredictedScore?.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture),
                 userScore = movie.UserRating.ToString(),
+                mismatchSuggestion = mismatchSuggestion is null
+                    ? null
+                    : new
+                    {
+                        kind = mismatchSuggestion.Kind,
+                        value = mismatchSuggestion.Value,
+                        label = mismatchSuggestion.Label,
+                        direction = mismatchSuggestion.Direction,
+                        prompt = mismatchSuggestion.Prompt,
+                        marks = mismatchSuggestion.Marks,
+                        mismatchValue = mismatchSuggestion.MismatchValue.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)
+                    },
                 message = showMismatch
                     ? $"Prediction gap: app {movie.PredictedScore:0.#} vs your {movie.UserRating:0.#}"
                     : string.Empty
@@ -274,6 +349,64 @@ public class MoviesController : Controller
 
         TempData["StatusMessage"] = "Watch feedback saved.";
         return RedirectToLocalOr(returnUrl, nameof(Index));
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApplyMismatchPreferenceSuggestion(
+        string kind,
+        string value,
+        string? label,
+        string direction,
+        string response,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(kind) || string.IsNullOrWhiteSpace(value))
+        {
+            return Json(new { success = false, message = "Missing mismatch preference factor." });
+        }
+
+        var preferences = _preferencesService.Get();
+        var state = GetOrCreateMismatchFactor(preferences, kind, value, label ?? value);
+
+        if (string.Equals(response, "accept", StringComparison.OrdinalIgnoreCase))
+        {
+            var adjustment = string.Equals(direction, "less", StringComparison.OrdinalIgnoreCase) ? -0.75m : 0.75m;
+            var applied = ApplyPreferenceAdjustment(preferences, kind, value, adjustment);
+            ResetMismatchMarks(state);
+            state.CooldownUntilUtc = null;
+            state.CooldownUntilRatingCount = 0;
+            _preferencesService.Save(preferences);
+            await _personalMatchService.RecalculateAsync(cancellationToken);
+
+            return Json(new
+            {
+                success = true,
+                recalculated = true,
+                applied,
+                message = applied
+                    ? $"Updated your preferences to show {direction} {label ?? value}."
+                    : "Could not apply that preference suggestion."
+            });
+        }
+
+        if (string.Equals(response, "reject", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(response, "dismiss", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(response, "no", StringComparison.OrdinalIgnoreCase))
+        {
+            ResetMismatchMarks(state);
+            state.CooldownUntilUtc = DateTime.UtcNow.Add(MismatchCooldownDuration);
+            state.CooldownUntilRatingCount = preferences.CompletedRatingCount + MismatchCooldownRatingCount;
+            _preferencesService.Save(preferences);
+            return Json(new { success = true, recalculated = false, dismissed = true });
+        }
+
+        if (string.Equals(response, "cancel", StringComparison.OrdinalIgnoreCase))
+        {
+            return Json(new { success = true, recalculated = false, cancelled = true });
+        }
+
+        return Json(new { success = false, message = "Unknown mismatch response." });
     }
 
     [HttpPost]
@@ -707,6 +840,174 @@ public class MoviesController : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    private MismatchSuggestionPayload? UpdateMismatchStateAndBuildPrompt(Movie movie, AppUserPreferences preferences, decimal mismatchValue)
+    {
+        var direction = movie.UserRating.GetValueOrDefault() >= movie.PredictedScore.GetValueOrDefault()
+            ? "more"
+            : "less";
+        var factor = SelectMismatchFactor(movie, preferences);
+        if (factor is null)
+        {
+            return null;
+        }
+
+        var state = GetOrCreateMismatchFactor(preferences, factor.Value.Kind, factor.Value.Value, factor.Value.Label);
+        if (state.CooldownUntilUtc.HasValue && state.CooldownUntilUtc.Value > DateTime.UtcNow)
+        {
+            return null;
+        }
+
+        if (state.CooldownUntilRatingCount > preferences.CompletedRatingCount)
+        {
+            return null;
+        }
+
+        var markDelta = mismatchValue >= ImmediateMismatchSuggestionThreshold ? 2 : 1;
+        if (string.Equals(direction, "less", StringComparison.OrdinalIgnoreCase))
+        {
+            state.NegativeMarks += markDelta;
+        }
+        else
+        {
+            state.PositiveMarks += markDelta;
+        }
+
+        state.Kind = factor.Value.Kind;
+        state.Value = factor.Value.Value;
+        state.Label = factor.Value.Label;
+
+        var marks = string.Equals(direction, "less", StringComparison.OrdinalIgnoreCase)
+            ? state.NegativeMarks
+            : state.PositiveMarks;
+        var shouldPrompt = mismatchValue >= ImmediateMismatchSuggestionThreshold || marks >= RepeatedMismatchPromptMarks;
+        if (!shouldPrompt)
+        {
+            return null;
+        }
+
+        var prompt = string.Equals(direction, "less", StringComparison.OrdinalIgnoreCase)
+            ? $"You disliked this more than expected. Use this as an extra signal to show fewer {factor.Value.Label} picks in future recommendations?"
+            : $"You liked this much more than expected. Use this as an extra signal to show more {factor.Value.Label} picks in future recommendations?";
+
+        return new MismatchSuggestionPayload(
+            factor.Value.Kind,
+            factor.Value.Value,
+            factor.Value.Label,
+            direction,
+            prompt,
+            marks,
+            mismatchValue);
+    }
+
+    private static (string Kind, string Value, string Label)? SelectMismatchFactor(Movie movie, AppUserPreferences preferences)
+    {
+        var genres = RecommendationViewHelper.SplitCsv(movie.GenresCsv).ToList();
+        if (genres.Count > 0)
+        {
+            var genre = genres
+                .OrderByDescending(x => GetExistingMismatchMarks(preferences, "genre", x))
+                .ThenBy(x => x)
+                .First();
+            return ("genre", genre, genre);
+        }
+
+        var directors = RecommendationViewHelper.SplitCsv(movie.Director).ToList();
+        if (directors.Count > 0)
+        {
+            var director = directors
+                .OrderByDescending(x => GetExistingMismatchMarks(preferences, "director", x))
+                .ThenBy(x => x)
+                .First();
+            return ("director", director, director);
+        }
+
+        var repeatedCountry = RecommendationViewHelper.SplitCsv(movie.Country)
+            .OrderByDescending(x => GetExistingMismatchMarks(preferences, "country", x))
+            .FirstOrDefault(x => GetExistingMismatchMarks(preferences, "country", x) > 0);
+        if (!string.IsNullOrWhiteSpace(repeatedCountry))
+        {
+            return ("country", repeatedCountry, repeatedCountry);
+        }
+
+        var repeatedLanguage = RecommendationViewHelper.SplitCsv(movie.Language)
+            .OrderByDescending(x => GetExistingMismatchMarks(preferences, "language", x))
+            .FirstOrDefault(x => GetExistingMismatchMarks(preferences, "language", x) > 0);
+        if (!string.IsNullOrWhiteSpace(repeatedLanguage))
+        {
+            return ("language", repeatedLanguage, repeatedLanguage);
+        }
+
+        return null;
+    }
+
+    private static int GetExistingMismatchMarks(AppUserPreferences preferences, string kind, string value)
+    {
+        var state = preferences.MismatchFactors.FirstOrDefault(x => string.Equals(x.Key, BuildMismatchKey(kind, value), StringComparison.OrdinalIgnoreCase));
+        return state is null ? 0 : state.PositiveMarks + state.NegativeMarks;
+    }
+
+    private static string BuildMismatchKey(string kind, string value)
+        => $"{kind.Trim().ToLowerInvariant()}:{value.Trim().ToLowerInvariant()}";
+
+    private static MismatchFactorState GetOrCreateMismatchFactor(AppUserPreferences preferences, string kind, string value, string label)
+    {
+        var key = BuildMismatchKey(kind, value);
+        var state = preferences.MismatchFactors.FirstOrDefault(x => string.Equals(x.Key, key, StringComparison.OrdinalIgnoreCase));
+        if (state is not null)
+        {
+            state.Kind = kind;
+            state.Value = value;
+            state.Label = string.IsNullOrWhiteSpace(label) ? value : label;
+            return state;
+        }
+
+        state = new MismatchFactorState
+        {
+            Key = key,
+            Kind = kind,
+            Value = value,
+            Label = string.IsNullOrWhiteSpace(label) ? value : label
+        };
+        preferences.MismatchFactors.Add(state);
+        return state;
+    }
+
+    private static void ResetMismatchMarks(MismatchFactorState state)
+    {
+        state.PositiveMarks = 0;
+        state.NegativeMarks = 0;
+    }
+
+    private static bool ApplyPreferenceAdjustment(AppUserPreferences preferences, string kind, string value, decimal delta)
+    {
+        var map = kind.Trim().ToLowerInvariant() switch
+        {
+            "genre" => preferences.GenreAdjustments,
+            "director" => preferences.DirectorAdjustments,
+            "country" => preferences.CountryAdjustments,
+            "language" => preferences.LanguageAdjustments,
+            _ => null
+        };
+
+        if (map is null)
+        {
+            return false;
+        }
+
+        var existing = map.TryGetValue(value, out var current) ? current : 0m;
+        var updated = Math.Clamp(existing + delta, -3m, 3m);
+        if (updated == 0m)
+        {
+            map.Remove(value);
+        }
+        else
+        {
+            map[value] = updated;
+        }
+
+        return true;
+    }
+
     private IActionResult RedirectToLocalOr(string? returnUrl, string fallbackAction)
     {
         if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
@@ -792,4 +1093,13 @@ public class MoviesController : Controller
 
     private static decimal GetRecommendationSortScore(Movie movie)
         => RecommendationViewHelper.GetDisplayMatchScore(movie);
+
+    private sealed record MismatchSuggestionPayload(
+        string Kind,
+        string Value,
+        string Label,
+        string Direction,
+        string Prompt,
+        int Marks,
+        decimal MismatchValue);
 }

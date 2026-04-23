@@ -1,17 +1,26 @@
+@using LocalMovieVault.Web.Helpers
 @model SurpriseMovieViewModel
 @{
     ViewData["Title"] = "Surprise me";
     ViewData["DismissScoreThreshold"] = 50m;
+    string GetFitLabel(decimal score) => score switch
+    {
+        >= 82m => "Strong fit",
+        >= 68m => "Good fit",
+        >= 52m => "Mixed fit",
+        >= 36m => "Risky fit",
+        _ => "Weak fit"
+    };
 }
 
-<section class="panel dashboard-shell">
-    <div class="section-head section-head-inline">
-        <div>
+<section class="panel dashboard-shell dashboard-shell-polished">
+    <div class="section-head section-head-inline dashboard-shell-head">
+        <div class="dashboard-title-row">
             <h1 class="section-title">Surprise me</h1>
-            <div class="section-subtitle">Eligible movies: <strong>@Model.EligibleCount</strong></div>
+            <span class="library-total-pill">@Model.TotalCount total</span>
         </div>
         <div class="toolbar dashboard-actions">
-            <a class="button primary" asp-controller="Home" asp-action="Surprise">Randomize</a>
+            <a class="button primary dashboard-randomize-button" asp-controller="Home" asp-action="Surprise">Randomize</a>
         </div>
     </div>
 
@@ -21,9 +30,48 @@
     }
     else
     {
-        <div class="movie-grid fixed-grid fixed-grid-single">
-            <partial name="_DiscoveryCard" model="Model.Pick" />
-        </div>
+        var pickScore = RecommendationViewHelper.GetDisplayMatchScore(Model.Pick);
+
+        <article class="feature-pick-card">
+            <div class="feature-pick-media">
+                <a asp-controller="Movies" asp-action="Details" asp-route-id="@Model.Pick.Id">
+                    @if (!string.IsNullOrWhiteSpace(Model.Pick.PosterUrl))
+                    {
+                        <img class="feature-pick-poster" src="@Model.Pick.PosterUrl" alt="Poster for @Model.Pick.Title" />
+                    }
+                    else
+                    {
+                        <div class="feature-pick-poster feature-pick-poster-placeholder">
+                            <span>@Model.Pick.Title</span>
+                        </div>
+                    }
+                </a>
+                <div class="feature-pick-overlay">
+                    <h2>@Model.Pick.Title</h2>
+                    <div class="feature-pick-meta">@(RecommendationViewHelper.SplitCsv(Model.Pick.GenresCsv).FirstOrDefault() ?? "No genre")@(Model.Pick.Year.HasValue ? $" - {Model.Pick.Year.Value}" : string.Empty)</div>
+                </div>
+            </div>
+            <div class="feature-pick-body">
+                <div class="feature-pick-metrics">
+                    <div class="feature-pick-metric feature-pick-metric-accent">
+                        <div class="feature-pick-metric-label">Match</div>
+                        <div class="feature-pick-metric-value">@pickScore.ToString("0.#")</div>
+                    </div>
+                    <div class="feature-pick-metric">
+                        <div class="feature-pick-metric-label">IMDb</div>
+                        <div class="feature-pick-metric-value">@(Model.Pick.ImdbRating?.ToString("0.0") ?? "-")</div>
+                    </div>
+                    <div class="feature-pick-metric feature-pick-metric-fit">
+                        <div class="feature-pick-metric-label">Fit</div>
+                        <div class="feature-pick-metric-value">@GetFitLabel(pickScore)</div>
+                    </div>
+                </div>
+                <div class="feature-pick-inline-actions">
+                    <a class="button primary" asp-controller="Movies" asp-action="Details" asp-route-id="@Model.Pick.Id">Open movie</a>
+                    <a class="button" asp-controller="Home" asp-action="Surprise">Try another</a>
+                </div>
+            </div>
+        </article>
     }
 </section>
 

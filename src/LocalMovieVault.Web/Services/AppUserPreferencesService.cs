@@ -87,6 +87,12 @@ public sealed class AppUserPreferences
     public decimal CinematographyPreferenceWeight { get; set; } = 1.2m;
     public decimal ImdbPreferenceWeight { get; set; } = 0.9m;
     public List<string> ImportantTags { get; set; } = [];
+    public int CompletedRatingCount { get; set; }
+    public List<MismatchFactorState> MismatchFactors { get; set; } = [];
+    public Dictionary<string, decimal> GenreAdjustments { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, decimal> DirectorAdjustments { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, decimal> CountryAdjustments { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, decimal> LanguageAdjustments { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public TasteTuningSettings TasteTuning { get; set; } = TasteTuningSettings.CreateDefault();
 
     public static AppUserPreferences CreateDefault() => new();
@@ -97,6 +103,15 @@ public sealed class AppUserPreferences
     public void Normalize()
     {
         ImportantTags = NormalizeImportantTags(ImportantTags);
+        MismatchFactors = (MismatchFactors ?? [])
+            .Where(x => !string.IsNullOrWhiteSpace(x.Key) && !string.IsNullOrWhiteSpace(x.Kind) && !string.IsNullOrWhiteSpace(x.Value))
+            .GroupBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(x => x.OrderByDescending(y => y.PositiveMarks + y.NegativeMarks).First())
+            .ToList();
+        GenreAdjustments = NormalizeAdjustmentMap(GenreAdjustments);
+        DirectorAdjustments = NormalizeAdjustmentMap(DirectorAdjustments);
+        CountryAdjustments = NormalizeAdjustmentMap(CountryAdjustments);
+        LanguageAdjustments = NormalizeAdjustmentMap(LanguageAdjustments);
         TasteTuning ??= TasteTuningSettings.CreateDefault();
     }
 
@@ -108,6 +123,23 @@ public sealed class AppUserPreferences
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(4)
             .ToList();
+
+    private static Dictionary<string, decimal> NormalizeAdjustmentMap(IDictionary<string, decimal>? source)
+        => (source ?? new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase))
+            .Where(x => !string.IsNullOrWhiteSpace(x.Key) && x.Value != 0m)
+            .ToDictionary(x => x.Key.Trim(), x => Math.Clamp(x.Value, -3m, 3m), StringComparer.OrdinalIgnoreCase);
+}
+
+public sealed class MismatchFactorState
+{
+    public string Key { get; set; } = string.Empty;
+    public string Kind { get; set; } = string.Empty;
+    public string Value { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public int PositiveMarks { get; set; }
+    public int NegativeMarks { get; set; }
+    public DateTime? CooldownUntilUtc { get; set; }
+    public int CooldownUntilRatingCount { get; set; }
 }
 
 public sealed class TasteTuningSettings

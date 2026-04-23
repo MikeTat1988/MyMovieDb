@@ -156,6 +156,83 @@
     return payload;
   }
 
+  async function handleMismatchSuggestion(payload) {
+    if (!payload || !payload.mismatchSuggestion || !payload.mismatchSuggestion.prompt) {
+      if (payload && payload.showMismatchPopup && payload.message) {
+        window.alert(payload.message);
+      }
+
+      return;
+    }
+
+    const modal = byId('mismatchSuggestionModal');
+    const prompt = byId('mismatchSuggestionPrompt');
+    if (!modal || !prompt) {
+      const accepted = window.confirm(payload.mismatchSuggestion.prompt);
+      if (!accepted) {
+        return;
+      }
+
+      const fallbackFormData = new FormData();
+      fallbackFormData.append('__RequestVerificationToken', getRequestVerificationToken());
+      fallbackFormData.append('kind', payload.mismatchSuggestion.kind || '');
+      fallbackFormData.append('value', payload.mismatchSuggestion.value || '');
+      fallbackFormData.append('label', payload.mismatchSuggestion.label || '');
+      fallbackFormData.append('direction', payload.mismatchSuggestion.direction || '');
+      fallbackFormData.append('response', 'accept');
+      await postForm('/Movies/ApplyMismatchPreferenceSuggestion', fallbackFormData);
+      return;
+    }
+
+    prompt.textContent = payload.mismatchSuggestion.prompt;
+    const decision = await new Promise((resolve) => {
+      const accept = byId('mismatchSuggestionAccept');
+      const reject = byId('mismatchSuggestionReject');
+      const cancel = byId('mismatchSuggestionCancel');
+      const closeButtons = modal.querySelectorAll('.js-close-modal');
+
+      function cleanup(result) {
+        if (accept) accept.onclick = null;
+        if (reject) reject.onclick = null;
+        if (cancel) cancel.onclick = null;
+        closeButtons.forEach((button) => {
+          button.onclick = null;
+        });
+        modal.onclick = null;
+        closeModal(modal);
+        resolve(result);
+      }
+
+      if (accept) accept.onclick = () => cleanup('accept');
+      if (reject) reject.onclick = () => cleanup('reject');
+      if (cancel) cancel.onclick = () => cleanup('cancel');
+      closeButtons.forEach((button) => {
+        button.onclick = () => cleanup('cancel');
+      });
+      modal.onclick = (event) => {
+        if (event.target === modal) {
+          cleanup('cancel');
+        }
+      };
+
+      openModal(modal);
+    });
+
+    if (decision === 'cancel') {
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('__RequestVerificationToken', getRequestVerificationToken());
+    formData.append('kind', payload.mismatchSuggestion.kind || '');
+    formData.append('value', payload.mismatchSuggestion.value || '');
+    formData.append('label', payload.mismatchSuggestion.label || '');
+    formData.append('direction', payload.mismatchSuggestion.direction || '');
+    formData.append('response', decision === 'accept' ? 'accept' : 'reject');
+
+    await postForm('/Movies/ApplyMismatchPreferenceSuggestion', formData);
+  }
+
   function submitFallbackPost(url, fields) {
     const form = document.createElement('form');
     form.method = 'POST';
@@ -174,17 +251,37 @@
     form.submit();
   }
 
+  function populateToggleWatchedForm(trigger) {
+    const form = byId('toggleWatchedForm');
+    if (!form) return null;
+
+    const movieId = trigger.dataset.movieId || '';
+    const returnUrl = trigger.dataset.returnUrl || (window.location.pathname + window.location.search);
+
+    const movieIdInput = byId('toggleWatchedMovieId');
+    if (movieIdInput) {
+      movieIdInput.value = movieId;
+    }
+
+    const returnUrlInput = byId('toggleWatchedReturnUrl');
+    if (returnUrlInput) {
+      returnUrlInput.value = returnUrl;
+    }
+
+    return form;
+  }
+
   async function toggleToUnwatched(trigger) {
     if (!window.confirm('Mark this movie as unwatched?')) {
       return;
     }
 
-    const formData = new FormData();
-    formData.append('__RequestVerificationToken', getRequestVerificationToken());
-    formData.append('id', trigger.dataset.movieId || '');
-    formData.append('returnUrl', trigger.dataset.returnUrl || (window.location.pathname + window.location.search));
+    const form = populateToggleWatchedForm(trigger);
+    if (!form) {
+      throw new Error('Toggle form not found.');
+    }
 
-    await postForm('/Movies/ToggleWatched', formData);
+    await postForm(form.action, new FormData(form));
     saveReviewScrollPosition();
     window.location.reload();
   }
@@ -224,9 +321,15 @@
     document.querySelectorAll('.js-toggle-unwatched').forEach((trigger) => {
       trigger.addEventListener('click', async (event) => {
         event.preventDefault();
+        const toggleForm = populateToggleWatchedForm(trigger);
         try {
           await toggleToUnwatched(trigger);
         } catch (_) {
+          if (toggleForm) {
+            toggleForm.requestSubmit();
+            return;
+          }
+
           submitFallbackPost('/Movies/ToggleWatched', {
             __RequestVerificationToken: getRequestVerificationToken(),
             id: trigger.dataset.movieId || '',
@@ -269,8 +372,10 @@
 
       try {
         const payload = await postForm(form.action, new FormData(form));
-        if (payload.showMismatchPopup && payload.message) {
-          window.alert(payload.message);
+        try {
+          await handleMismatchSuggestion(payload);
+        } catch (_) {
+          window.alert('Watched feedback was saved, but the extra recommendation signal could not be stored.');
         }
 
         closeModal(byId('watchFeedbackModal'));

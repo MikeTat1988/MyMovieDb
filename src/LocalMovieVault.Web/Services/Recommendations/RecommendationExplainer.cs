@@ -6,27 +6,83 @@ public sealed class RecommendationExplainer : IRecommendationExplainer
     {
         var positives = context.PositiveFactors
             .OrderByDescending(x => x.Weight)
-            .Select(x => x.Label.Replace("tag: ", string.Empty, StringComparison.OrdinalIgnoreCase))
+            .Select(FormatFactor)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(3)
             .ToList();
 
-        var risk = context.NegativeFactors
+        var blockers = context.NegativeFactors
             .OrderByDescending(x => x.Weight)
-            .Select(x => x.Label.Replace("tag: ", string.Empty, StringComparison.OrdinalIgnoreCase))
-            .FirstOrDefault();
-        var likedMatches = context.SimilarToLiked.Take(2).Select(x => x.Title).ToList();
+            .Select(FormatFactor)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(2)
+            .ToList();
+        var likedMatches = context.SimilarToLiked
+            .Where(x => x.SimilarityScore >= 8m)
+            .Take(2)
+            .Select(x => x.Title)
+            .ToList();
+        var evidenceSuffix = BuildEvidenceSuffix(context);
+
+        if (context.FinalScore < 35m)
+        {
+            var reason = blockers.Count == 0
+                ? "Probably not a strong fit based on your current ratings"
+                : $"Probably not a strong fit because of {string.Join(", ", blockers)}";
+            if (positives.Count > 0)
+            {
+                reason += $". Small overlap from {string.Join(", ", positives.Take(2))}";
+            }
+
+            return reason + evidenceSuffix;
+        }
+
+        if (context.FinalScore < 55m)
+        {
+            var reason = blockers.Count == 0
+                ? "Mixed fit with more caution than confidence"
+                : $"Mixed fit because of {string.Join(", ", blockers)}";
+            if (positives.Count > 0)
+            {
+                reason += $", despite some support from {string.Join(", ", positives.Take(2))}";
+            }
+
+            return reason + evidenceSuffix;
+        }
 
         var why = positives.Count == 0
             ? "Limited personal evidence so far"
-            : $"Likely to work because of {string.Join(", ", positives)}";
+            : context.FinalScore >= 78m
+                ? $"Likely to work because of {string.Join(", ", positives)}"
+                : $"Could work because of {string.Join(", ", positives)}";
         if (likedMatches.Count > 0)
         {
             why += $" and similarities to {string.Join(" / ", likedMatches)}";
         }
 
-        return string.IsNullOrWhiteSpace(risk)
-            ? why + "."
-            : $"{why}. Risk: {risk.ToLowerInvariant()}.";
+        if (blockers.Count > 0 && context.ConfidenceScore >= 55m)
+        {
+            why += $". Risk: {blockers[0].ToLowerInvariant()}";
+        }
+
+        return why + evidenceSuffix;
+    }
+
+    private static string FormatFactor(ExplanationFactor factor)
+        => factor.Label.Replace("tag: ", string.Empty, StringComparison.OrdinalIgnoreCase);
+
+    private static string BuildEvidenceSuffix(RecommendationContext context)
+    {
+        if (context.ConfidenceScore >= 72m)
+        {
+            return ". Strong evidence.";
+        }
+
+        if (context.ConfidenceScore > 0m && context.ConfidenceScore < 45m)
+        {
+            return ". Limited evidence.";
+        }
+
+        return ".";
     }
 }

@@ -3,6 +3,8 @@ using LocalMovieVault.Web.Data;
 using LocalMovieVault.Web.Helpers;
 using LocalMovieVault.Web.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace LocalMovieVault.Web.Services.Recommendations;
 
@@ -12,18 +14,21 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
     private readonly IRecommendationFeatureExtractor _featureExtractor;
     private readonly IRecommendationExplainer _explainer;
     private readonly AppUserPreferencesService _preferencesService;
+    private readonly ILogger<DeterministicRecommendationEngine> _logger;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false };
 
     public DeterministicRecommendationEngine(
         AppDbContext dbContext,
         IRecommendationFeatureExtractor featureExtractor,
         IRecommendationExplainer explainer,
-        AppUserPreferencesService preferencesService)
+        AppUserPreferencesService preferencesService,
+        ILogger<DeterministicRecommendationEngine>? logger = null)
     {
         _dbContext = dbContext;
         _featureExtractor = featureExtractor;
         _explainer = explainer;
         _preferencesService = preferencesService;
+        _logger = logger ?? NullLogger<DeterministicRecommendationEngine>.Instance;
     }
 
     public async Task RecalculateAsync(CancellationToken cancellationToken = default)
@@ -46,9 +51,20 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
             movie.PredictedReason = result.PredictedReason;
             movie.RecommendationContextJson = JsonSerializer.Serialize(result.Context, JsonOptions);
             movie.PlotKeywordsCsv = RecommendationCatalog.JoinCsv(result.Context.PlotKeywords);
+
+            _logger.LogDebug(
+                "Recommendation for {MovieId} {Title}: affinity={AffinityScore:0.0} confidence={ConfidenceScore:0.0} predicted={PredictedScore:0.0} positives={PositiveSummary} negatives={NegativeSummary}",
+                movie.Id,
+                movie.Title,
+                result.PersonalMatchScore,
+                result.Context.ConfidenceScore,
+                result.FinalScore,
+                string.Join(", ", result.Context.PositiveFactors.OrderByDescending(x => x.Weight).Take(3).Select(x => x.Label)),
+                string.Join(", ", result.Context.NegativeFactors.OrderByDescending(x => x.Weight).Take(2).Select(x => x.Label)));
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("Recalculated recommendations for {MovieCount} movies.", movies.Count);
     }
 
     public IReadOnlyDictionary<int, RecommendationResult> CalculateResults(IReadOnlyList<Movie> movies, AppUserPreferences? overridePreferences = null)
@@ -73,14 +89,25 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
         {
             var scoreProfile = BuildScoreProfileForMovie(movie, tasteProfile, features[movie.Id], preferences);
             var result = ScoreMovie(movie, scoreProfile, movies, features, preferences);
-            ApplyTastePriorityAdjustment(result, movie, features[movie.Id], preferences);
+            results[movie.Id] = result;
+        }
+
+        ApplyCalibratedScores(movies, results);
+
+        foreach (var movie in movies)
+        {
+            ApplyTastePriorityAdjustment(results[movie.Id], movie, features[movie.Id], preferences);
+        }
+
+        foreach (var movie in movies)
+        {
+            var result = results[movie.Id];
             result.Context.PlotKeywords = features[movie.Id].PlotKeywords.ToList();
             var predictedGrade = RecommendationViewHelper.MapScoreToGrade(result.FinalScore) ?? UserGrade.Meh;
             result.PredictedLabel = RecommendationViewHelper.GetGradeLabel(predictedGrade);
             result.Context.PredictedLabel = result.PredictedLabel;
             result.Context.FinalScore = result.FinalScore;
             result.PredictedReason = _explainer.BuildReason(result.Context);
-            results[movie.Id] = result;
         }
 
         return results;
@@ -128,7 +155,7 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
 
         foreach (var movie in movies)
         {
-            if (movie.WatchedStatus != WatchedStatus.Watched || !movie.UserGrade.HasValue)
+            if (!IsCompletedTasteAnchor(movie))
             {
                 continue;
             }
@@ -167,7 +194,7 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
         RecommendationFeatureSet movieFeatures,
         AppUserPreferences preferences)
     {
-        if (movie.WatchedStatus != WatchedStatus.Watched || !movie.UserGrade.HasValue)
+        if (!IsCompletedTasteAnchor(movie))
         {
             return baseProfile;
         }
@@ -220,6 +247,10 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
         broadFit += ApplyFeatureWeights(context.PositiveFactors, context.NegativeFactors, "language", featureSet.Languages, profile.LanguageWeights, 0.3m);
         broadFit += ApplyFeatureWeights(context.PositiveFactors, context.NegativeFactors, "story", featureSet.PlotKeywords, profile.PlotKeywordWeights, 0.8m * preferences.StoryPreferenceWeight);
         broadFit += ApplyReasonTagWeights(context.PositiveFactors, context.NegativeFactors, featureSet.ReasonTagHints, profile.ReasonTagWeights, preferences, featureSet.Genres, 1.4m * preferences.CinematographyPreferenceWeight * preferences.TasteTuning.PositiveExplicitTagWeight);
+        broadFit += ApplyExplicitPreferenceAdjustments(context.PositiveFactors, context.NegativeFactors, "genre", featureSet.Genres, preferences.GenreAdjustments, 1.5m);
+        broadFit += ApplyExplicitPreferenceAdjustments(context.PositiveFactors, context.NegativeFactors, "director", featureSet.Directors, preferences.DirectorAdjustments, 1.2m);
+        broadFit += ApplyExplicitPreferenceAdjustments(context.PositiveFactors, context.NegativeFactors, "country", featureSet.Countries, preferences.CountryAdjustments, 0.55m);
+        broadFit += ApplyExplicitPreferenceAdjustments(context.PositiveFactors, context.NegativeFactors, "language", featureSet.Languages, preferences.LanguageAdjustments, 0.55m);
 
         if (!string.IsNullOrWhiteSpace(featureSet.Decade))
         {
@@ -232,44 +263,47 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
         }
 
         var similarity = ScoreSimilarity(movie, featureSet, profile, allMovies, features, context);
-        var gradeBase = Math.Clamp(52m + (broadFit * 5.5m) + (similarity * 60m), 0m, 100m);
-        var qualityBoost = (featureSet.QualityConfidence - 50m) * 0.16m * preferences.ImdbPreferenceWeight;
+        var affinityBase = Math.Clamp(24m + (broadFit * 3.1m) + (similarity * 28m), 0m, 100m);
         var positiveTagScore = context.PositiveFactors
             .Where(x => x.Label.StartsWith("tag:", StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(x => x.Weight)
             .Take(3)
-            .Sum(x => x.Weight * 4.8m);
+            .Sum(x => x.Weight * 2.6m);
         var negativeTagScore = context.NegativeFactors
             .Where(x => x.Label.StartsWith("tag:", StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(x => x.Weight)
             .Take(2)
-            .Sum(x => x.Weight * 4.2m);
-        var similarityScore = Math.Clamp(50m + similarity * 100m, 0m, 100m);
-        positiveTagScore = Math.Clamp(positiveTagScore, 0m, 42m);
-        negativeTagScore = Math.Clamp(negativeTagScore, 0m, 28m);
+            .Sum(x => x.Weight * 2.8m);
+        positiveTagScore = Math.Clamp(positiveTagScore, 0m, 22m);
+        negativeTagScore = Math.Clamp(negativeTagScore, 0m, 18m);
 
-        var finalScore = Math.Clamp(
-            (0.50m * gradeBase)
-            + (0.25m * positiveTagScore)
-            - (0.15m * negativeTagScore)
-            + (0.10m * similarityScore)
-            + qualityBoost,
+        var affinityScore = Math.Clamp(
+            affinityBase
+            + (positiveTagScore * 0.42m)
+            - (negativeTagScore * 0.56m),
             0m,
             100m);
+        var confidenceScore = CalculateConfidenceScore(featureSet, context, similarity, preferences);
+        context.AffinityScore = decimal.Round(affinityScore, 1);
+        context.ConfidenceScore = decimal.Round(confidenceScore, 1);
+        context.FinalScore = decimal.Round(affinityScore, 1);
 
-        var predictedGrade = RecommendationViewHelper.MapScoreToGrade(finalScore) ?? UserGrade.Meh;
-        context.PredictedLabel = RecommendationViewHelper.GetGradeLabel(predictedGrade);
-        context.FinalScore = finalScore;
+        if (confidenceScore < 45m)
+        {
+            context.WarningFactors.Add("Limited evidence");
+        }
+        else if (confidenceScore >= 72m)
+        {
+            context.WarningFactors.Add("Strong evidence");
+        }
 
         var result = new RecommendationResult
         {
-            FinalScore = decimal.Round(finalScore, 1),
-            PersonalMatchScore = decimal.Round(gradeBase, 1),
-            PredictedLabel = RecommendationViewHelper.GetGradeLabel(predictedGrade),
+            FinalScore = decimal.Round(affinityScore, 1),
+            PersonalMatchScore = decimal.Round(affinityScore, 1),
             Context = context
         };
 
-        result.PredictedReason = _explainer.BuildReason(context);
         return result;
     }
 
@@ -337,6 +371,11 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
         return likedBoost - dislikedPenalty;
     }
 
+    private static bool IsCompletedTasteAnchor(Movie movie)
+        => movie.WatchedStatus == WatchedStatus.Watched
+            && movie.UserGrade.HasValue
+            && !movie.NeedsTagReview;
+
     private static decimal ComputeSimilarity(RecommendationFeatureSet left, RecommendationFeatureSet right)
     {
         var total = 0m;
@@ -372,6 +411,40 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
         foreach (var value in values.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             total += ApplyFeatureWeight(positives, negatives, labelPrefix, value, weights, multiplier);
+        }
+
+        return total;
+    }
+
+    private static decimal ApplyExplicitPreferenceAdjustments(
+        List<ExplanationFactor> positives,
+        List<ExplanationFactor> negatives,
+        string kind,
+        IEnumerable<string> values,
+        IReadOnlyDictionary<string, decimal> adjustments,
+        decimal multiplier)
+    {
+        var total = 0m;
+        foreach (var value in values.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!adjustments.TryGetValue(value, out var rawAdjustment) || rawAdjustment == 0m)
+            {
+                continue;
+            }
+
+            var weighted = rawAdjustment * multiplier;
+            var direction = weighted > 0m ? "more" : "less";
+            var factor = new ExplanationFactor($"preference: {direction} {kind} {value}", Math.Abs(weighted), weighted > 0m);
+            if (weighted > 0m)
+            {
+                positives.Add(factor);
+            }
+            else
+            {
+                negatives.Add(factor);
+            }
+
+            total += weighted;
         }
 
         return total;
@@ -526,6 +599,59 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
         return importantBoost;
     }
 
+    private static decimal CalculateConfidenceScore(
+        RecommendationFeatureSet featureSet,
+        RecommendationContext context,
+        decimal similarity,
+        AppUserPreferences preferences)
+    {
+        var strongPositiveCount = context.PositiveFactors.Count(x => x.Weight >= 0.8m);
+        var strongNegativeCount = context.NegativeFactors.Count(x => x.Weight >= 0.8m);
+        var similarityEvidence = Math.Clamp(Math.Abs(similarity) * 100m, 0m, 22m);
+
+        return Math.Clamp(
+            18m
+            + (featureSet.MetadataQualityScore * 0.34m)
+            + (featureSet.QualityConfidence * 0.22m * preferences.ImdbPreferenceWeight)
+            + (strongPositiveCount * 4.5m)
+            + similarityEvidence
+            - (strongNegativeCount * 1.5m),
+            0m,
+            100m);
+    }
+
+    private static void ApplyCalibratedScores(
+        IReadOnlyList<Movie> movies,
+        IDictionary<int, RecommendationResult> results)
+    {
+        var ordered = movies
+            .Select(movie => (Movie: movie, Result: results[movie.Id]))
+            .OrderByDescending(x => x.Result.PersonalMatchScore)
+            .ThenByDescending(x => x.Result.Context.ConfidenceScore)
+            .ThenBy(x => x.Movie.Title, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(x => x.Movie.Id)
+            .ToList();
+
+        for (var index = 0; index < ordered.Count; index++)
+        {
+            var entry = ordered[index];
+            var percentile = ordered.Count == 1
+                ? 1m
+                : 1m - (index / (decimal)(ordered.Count - 1));
+            var rankBonus = percentile * 2.5m;
+            var confidenceAdjustment = (entry.Result.Context.ConfidenceScore - 58m) * 0.08m;
+            var calibratedScore = Math.Clamp(
+                (entry.Result.PersonalMatchScore * 0.87m)
+                + rankBonus
+                + confidenceAdjustment,
+                0m,
+                94m);
+
+            entry.Result.FinalScore = decimal.Round(calibratedScore, 1);
+            entry.Result.Context.FinalScore = entry.Result.FinalScore;
+        }
+    }
+
     private static void ApplyTastePriorityAdjustment(
         RecommendationResult result,
         Movie movie,
@@ -563,6 +689,7 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
         }
 
         result.FinalScore = decimal.Round(Math.Clamp(result.FinalScore + Math.Min(totalBonus, 12m), 0m, 100m), 1);
+        result.Context.FinalScore = result.FinalScore;
     }
 
     private static bool MatchesImportantTagSignal(string tag, string source)

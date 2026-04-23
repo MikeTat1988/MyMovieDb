@@ -2,9 +2,6 @@
 @using LocalMovieVault.Web.Models
 @model Movie
 @{
-    var dismissThreshold = ViewData["DismissScoreThreshold"] is decimal threshold ? threshold : 50m;
-    var librarySection = ViewData["LibrarySection"] as string ?? string.Empty;
-    var opensReviewModal = string.Equals(librarySection, "review", StringComparison.OrdinalIgnoreCase);
     var score = RecommendationViewHelper.GetDisplayMatchScore(Model);
     var detailUrl = Url.Action("Details", "Movies", new { id = Model.Id }) ?? "#";
     var reviewReturnUrl = detailUrl;
@@ -16,11 +13,32 @@
         ? "https://www.youtube.com"
         : $"https://www.youtube.com/results?search_query={System.Net.WebUtility.UrlEncode(trailerQuery)}";
     var isWatched = Model.WatchedStatus == WatchedStatus.Watched;
+    var hasCompletedReview = RecommendationViewHelper.HasCompletedReview(Model);
     var watchActionReturnUrl = $"{Context.Request.Path}{Context.Request.QueryString}";
     var primaryGenre = RecommendationViewHelper.SplitCsv(Model.GenresCsv).FirstOrDefault() ?? "No genre";
     var metaLine = Model.Year.HasValue ? $"{primaryGenre} • {Model.Year.Value}" : primaryGenre;
-    var imdbLine = $"IMDb {(Model.ImdbRating?.ToString("0.0") ?? "-")}";
-    var scoreLine = $"Match {score.ToString("0.#")}";
+    var showUserScore = isWatched
+        && !Model.NeedsTagReview
+        && Model.UserRating.HasValue
+        && Model.UserGrade.HasValue;
+    var reviewActionLabel = !isWatched
+        ? "Review"
+        : hasCompletedReview
+            ? "Edit review"
+            : "Finish review";
+    var cardStateLabel = !isWatched
+        ? "Queued"
+        : hasCompletedReview
+            ? "Ready"
+            : "Review later";
+    var fitLabel = score switch
+    {
+        >= 82m => "Strong fit",
+        >= 68m => "Good fit",
+        >= 52m => "Mixed fit",
+        >= 36m => "Risky fit",
+        _ => "Weak fit"
+    };
     var watchToggleClass = isWatched ? "movie-card-status-toggle is-watched js-toggle-unwatched" : "movie-card-status-toggle is-unwatched js-open-watch-modal";
     var watchToggleLabel = isWatched ? "Mark unwatched" : "Mark watched or review later";
 }
@@ -34,8 +52,7 @@
          data-primary-verdict="@(Model.PrimaryVerdict?.ToString() ?? string.Empty)"
          data-reason-tags="@RecommendationViewHelper.JoinCsv(RecommendationViewHelper.SplitCsv(Model.NormalizedTagsCsv ?? Model.ReasonTagsCsv))">
     <div class="movie-card-media">
-        <a class="movie-card-poster-link"
-           href="@detailUrl">
+        <a class="movie-card-poster-link" href="@detailUrl">
             @if (!string.IsNullOrWhiteSpace(Model.PosterUrl))
             {
                 <img class="movie-thumb" src="@Model.PosterUrl" alt="Poster for @Model.Title" loading="lazy" />
@@ -66,22 +83,33 @@
     </div>
 
     <div class="movie-card-body compact-body">
-        <div class="movie-card-title-frame">
-            <h3 class="movie-card-title">
-                <a class="movie-card-title-link" href="@detailUrl">@Model.Title</a>
-            </h3>
-        </div>
+        <div class="movie-card-eyebrow">@cardStateLabel</div>
+        <h3 class="movie-card-title">
+            <a class="movie-card-title-link" href="@detailUrl">@Model.Title</a>
+        </h3>
 
-        <div class="movie-card-meta-line">
-            @primaryGenre@if (Model.Year.HasValue)
-            {
-                <text> - @Model.Year.Value</text>
-            }
-        </div>
+        <div class="movie-card-meta-line">@metaLine</div>
 
         <div class="movie-card-score-line">
-            <span class="movie-card-score-chip">@imdbLine</span>
-            <span class="movie-card-score-chip movie-card-score-chip--accent">@scoreLine</span>
+            <span class="movie-card-score-chip movie-card-score-chip--accent">
+                <span class="movie-card-score-chip-label">Match</span>
+                <span class="movie-card-score-chip-value">@score.ToString("0.#")</span>
+            </span>
+            <span class="movie-card-score-chip">
+                <span class="movie-card-score-chip-label">IMDb</span>
+                <span class="movie-card-score-chip-value">@(Model.ImdbRating?.ToString("0.0") ?? "-")</span>
+            </span>
+            <span class="movie-card-score-chip movie-card-score-chip--fit">
+                <span class="movie-card-score-chip-label">Fit</span>
+                <span class="movie-card-score-chip-value">@fitLabel</span>
+            </span>
+            @if (showUserScore)
+            {
+                <span class="movie-card-score-chip movie-card-score-chip--user movie-card-score-chip--user-inline">
+                    <span class="movie-card-score-chip-label">You</span>
+                    <span class="movie-card-score-chip-value">@Model.UserRating?.ToString("0.#")</span>
+                </span>
+            }
         </div>
 
         <div class="card-actions compact-card-actions movie-card-actions">
@@ -96,7 +124,7 @@
                    data-reason-tags="@RecommendationViewHelper.JoinCsv(RecommendationViewHelper.SplitCsv(Model.NormalizedTagsCsv ?? Model.ReasonTagsCsv))"
                    data-return-url="@reviewReturnUrl"
                    data-review-tab-url="@reviewTabUrl"
-                   data-watched="@(isWatched ? "watched" : "unwatched")">Review</a>
+                   data-watched="@(isWatched ? "watched" : "unwatched")">@reviewActionLabel</a>
                 <a class="button small" href="@trailerUrl" target="_blank" rel="noopener">Trailer</a>
             </div>
         </div>

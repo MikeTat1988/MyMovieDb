@@ -63,6 +63,12 @@
                 <button class="button subtle is-hidden" type="button" id="watchFeedbackReviewLater">Review later</button>
             </div>
         </form>
+
+        <form asp-controller="Movies" asp-action="ToggleWatched" method="post" id="toggleWatchedForm" hidden>
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="id" id="toggleWatchedMovieId" />
+            <input type="hidden" name="returnUrl" id="toggleWatchedReturnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+        </form>
     </div>
 </div>
 
@@ -95,5 +101,22 @@
             </div>
             <button class="button danger" type="submit">Confirm dismissal</button>
         </form>
+    </div>
+</div>
+
+<div class="modal-backdrop app-modal is-hidden" id="mismatchSuggestionModal" aria-hidden="true">
+    <div class="modal-panel modal-panel-narrow">
+        <div class="panel-header compact-header-gap">
+            <div>
+                <div class="eyebrow">Prediction mismatch</div>
+                <h2 id="mismatchSuggestionTitle">Update taste signal?</h2>
+                <div class="panel-subtitle" id="mismatchSuggestionPrompt">The app noticed a strong gap between its score and your rating.</div>
+            </div>
+        </div>
+        <div class="modal-action-row">
+            <button class="button primary" type="button" id="mismatchSuggestionAccept">Yes</button>
+            <button class="button subtle" type="button" id="mismatchSuggestionReject">No</button>
+            <button class="button subtle" type="button" id="mismatchSuggestionCancel">Cancel</button>
+        </div>
     </div>
 </div>

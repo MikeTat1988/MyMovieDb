@@ -2,7 +2,7 @@
   "schemaVersion": "2",
   "id": "mymoviedb",
   "name": "MyMovieDB",
-  "version": "9.0.0-masterapp.8",
+  "version": "9.0.0-masterapp.9",
   "appType": "source",
   "build": {
     "installCommand": "dotnet publish ./src/LocalMovieVault.Web/LocalMovieVault.Web.csproj -c Release -o ./build/LocalMovieVault.Web",

@@ -30,6 +30,8 @@ public sealed class RecommendationContext
 {
     public string Title { get; set; } = string.Empty;
     public decimal FinalScore { get; set; }
+    public decimal AffinityScore { get; set; }
+    public decimal ConfidenceScore { get; set; }
     public string PredictedLabel { get; set; } = "Maybe";
     public List<string> PlotKeywords { get; set; } = [];
     public List<ExplanationFactor> PositiveFactors { get; set; } = [];

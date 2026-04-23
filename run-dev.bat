@@ -13,6 +13,7 @@ set "TRAY_DLL=%~dp0tools\MyMovieDB.Tray\bin\Debug\net8.0-windows\MyMovieDB.Tray.
 set "TRAY_EXE=%~dp0tools\MyMovieDB.Tray\bin\Debug\net8.0-windows\MyMovieDB.Tray.exe"
 set "LISTEN_URL=http://+:5057"
 set "LOCAL_URL=http://127.0.0.1:5057"
+set "AppHost__AutoLaunchBrowser=true"
 
 echo ================================================== > "%LOGFILE%"
 echo MyMovieDB run-dev started %date% %time% >> "%LOGFILE%"

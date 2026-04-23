@@ -1,146 +1,172 @@
 @using LocalMovieVault.Web.Helpers
+@using LocalMovieVault.Web.Models
 @model MovieDetailsViewModel
 @{
     ViewData["Title"] = Model.Movie.Title;
     var movie = Model.Movie;
-    var isWatched = movie.WatchedStatus == LocalMovieVault.Web.Models.WatchedStatus.Watched;
-    var displayScore = RecommendationViewHelper.GetDisplayMatchScore(movie);
+    var isWatched = movie.WatchedStatus == WatchedStatus.Watched;
+    var returnUrl = Url.Action("Details", "Movies", new { id = movie.Id }) ?? $"/Movies/Details/{movie.Id}";
+    var reasonTags = RecommendationViewHelper.JoinCsv(RecommendationViewHelper.SplitCsv(movie.NormalizedTagsCsv ?? movie.ReasonTagsCsv));
 }
 
-<section class="details-layout details-layout-reverse">
-    <div class="panel poster-panel">
-        @if (!string.IsNullOrWhiteSpace(movie.PosterUrl))
-        {
-            <img class="poster" src="@movie.PosterUrl" alt="Poster for @movie.Title" />
-        }
-        else
-        {
-            <div class="poster-placeholder">Poster not available</div>
-        }
-    </div>
+<section class="details-page">
+    <div class="details-page-card">
+        <div class="details-page-layout">
+            <aside class="details-poster-panel">
+                @if (!string.IsNullOrWhiteSpace(movie.PosterUrl))
+                {
+                    <img class="details-poster" src="@movie.PosterUrl" alt="Poster for @movie.Title" />
+                }
+                else
+                {
+                    <div class="details-poster-placeholder">
+                        <div class="details-poster-placeholder-badge">Poster unavailable</div>
+                        <div class="details-poster-placeholder-title">@movie.Title</div>
+                        <div class="details-poster-placeholder-meta">@(movie.Year?.ToString() ?? "Unknown year")</div>
+                    </div>
+                }
+            </aside>
 
-    <div class="panel">
-        <div class="panel-header details-top">
-            <div>
-                <div class="eyebrow">@Model.ReviewBadge</div>
-                <h1>@movie.Title</h1>
-                <div class="detail-hero-metrics">
+            <div class="details-main-column">
+                <div class="details-hero-copy">
+                    <div class="eyebrow">@Model.ReviewBadge</div>
+                    <h1>@movie.Title</h1>
+                </div>
+
+                <div class="details-hero-metrics details-hero-metrics-full">
                     <div class="detail-hero-metric detail-hero-metric-accent">
                         <div class="detail-hero-label">Match</div>
-                        <div class="detail-hero-value">@displayScore.ToString("0.#")</div>
+                        <div class="detail-hero-value">@Model.DisplayScore.ToString("0.#")</div>
                     </div>
                     <div class="detail-hero-metric">
                         <div class="detail-hero-label">IMDb</div>
                         <div class="detail-hero-value">@(movie.ImdbRating?.ToString("0.0") ?? "-")</div>
                     </div>
+                    <div class="detail-hero-metric detail-hero-metric-fit">
+                        <div class="detail-hero-label">Fit</div>
+                        <div class="detail-hero-value">@Model.FitLabel</div>
+                    </div>
                 </div>
-                <div class="detail-badges-row">
-                    <span class="metric-chip">@((movie.WatchedStatus == LocalMovieVault.Web.Models.WatchedStatus.Watched ? LocalMovieVault.Web.Helpers.RecommendationViewHelper.GetGradeLabel(movie.UserGrade) : movie.PredictedLabel ?? "Maybe"))</span>
-                </div>
-            </div>
-            <div class="toolbar">
-                @if (!movie.IsDismissed)
+
+                @if (Model.ShowHeroReviewAction)
                 {
-                    @if (isWatched)
-                    {
-                        <button class="button primary js-open-watch-modal" type="button"
-                                data-movie-id="@movie.Id"
-                                data-movie-title="@movie.Title"
-                                data-movie-genre="@movie.GenresCsv"
-                                data-primary-verdict="@(movie.PrimaryVerdict?.ToString() ?? string.Empty)"
-                                data-reason-tags="@RecommendationViewHelper.JoinCsv(RecommendationViewHelper.SplitCsv(movie.NormalizedTagsCsv ?? movie.ReasonTagsCsv))"
-                                data-return-url="@Url.Action("Details", "Movies", new { id = movie.Id })">
-                            Review
-                        </button>
-                        <button class="button subtle js-toggle-unwatched" type="button"
-                                data-movie-id="@movie.Id"
-                                data-return-url="@Url.Action("Details", "Movies", new { id = movie.Id })">
-                            Mark unwatched
-                        </button>
-                    }
-                    else
-                    {
-                        <button class="button primary js-open-watch-modal" type="button"
-                                data-movie-id="@movie.Id"
-                                data-movie-title="@movie.Title"
-                                data-movie-genre="@movie.GenresCsv"
-                                data-primary-verdict="@(movie.PrimaryVerdict?.ToString() ?? string.Empty)"
-                                data-reason-tags="@RecommendationViewHelper.JoinCsv(RecommendationViewHelper.SplitCsv(movie.NormalizedTagsCsv ?? movie.ReasonTagsCsv))"
-                                data-return-url="@Url.Action("Details", "Movies", new { id = movie.Id })">
-                            Mark watched
-                        </button>
-                    }
-                    <button class="button danger js-open-dismiss-modal" type="button"
+                    <button class="details-hero-slot details-hero-slot-button details-hero-slot-full js-open-watch-modal"
+                            type="button"
                             data-movie-id="@movie.Id"
-                            data-movie-title="@movie.Title">
-                        Dismiss
+                            data-movie-title="@movie.Title"
+                            data-movie-genre="@movie.GenresCsv"
+                            data-primary-verdict="@(movie.PrimaryVerdict?.ToString() ?? string.Empty)"
+                            data-reason-tags="@reasonTags"
+                            data-return-url="@returnUrl"
+                            data-watched="@(isWatched ? "watched" : "unwatched")">
+                        <span class="details-hero-slot-title">@Model.HeroSlotTitle</span>
+                        <span class="details-hero-slot-subtitle">@Model.HeroSlotSubtitle</span>
                     </button>
                 }
                 else
                 {
-                    <form asp-action="Restore" method="post">
+                    <div class="details-hero-slot details-hero-slot-full">
+                        <span class="details-hero-slot-title">@Model.HeroSlotTitle</span>
+                        <span class="details-hero-slot-subtitle">@Model.HeroSlotSubtitle</span>
+                    </div>
+                }
+
+                @if (Model.HasShortSummary)
+                {
+                    <section class="details-info-card">
+                        <div class="details-info-label">Short summary</div>
+                        <p class="details-info-copy">@movie.Overview</p>
+                    </section>
+                }
+
+                <section class="details-info-card">
+                    <div class="details-info-label">Rating explanation</div>
+                    <p class="details-info-copy">@((movie.PredictedReason ?? "Prediction will improve as you review more watched titles."))</p>
+                </section>
+
+                @if (Model.ShowComparison)
+                {
+                    <section class="details-compare-card">
+                        <div class="details-compare-head">
+                            <h2>Comparison vs @Model.ReferenceMovie!.Title</h2>
+                        </div>
+
+                        <div class="details-compare-table">
+                            <div class="details-compare-head-cell">Parameter</div>
+                            <div class="details-compare-head-cell">@movie.Title</div>
+                            <div class="details-compare-head-cell">@Model.ReferenceMovie!.Title</div>
+
+                            @foreach (var row in Model.ComparisonRows)
+                            {
+                                <div class="details-compare-cell details-compare-label">@row.Parameter</div>
+                                <div class="details-compare-cell details-compare-value">@row.CurrentValue</div>
+                                <div class="details-compare-cell details-compare-value">@row.ReferenceValue</div>
+                                @if (!string.IsNullOrWhiteSpace(row.Note))
+                                {
+                                    <div class="details-compare-row-note details-compare-row-note-desktop">@row.Note</div>
+                                }
+                            }
+                        </div>
+
+                        <div class="details-compare-stack">
+                            @foreach (var row in Model.ComparisonRows)
+                            {
+                                <article class="details-compare-row">
+                                    <div class="details-compare-row-parameter">@row.Parameter</div>
+                                    <div class="details-compare-row-sides">
+                                        <div class="details-compare-row-side">
+                                            <span class="details-compare-row-side-label">This movie</span>
+                                            <strong>@row.CurrentValue</strong>
+                                        </div>
+                                        <div class="details-compare-row-side">
+                                            <span class="details-compare-row-side-label">Reference</span>
+                                            <strong>@row.ReferenceValue</strong>
+                                        </div>
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(row.Note))
+                                    {
+                                        <div class="details-compare-row-note">@row.Note</div>
+                                    }
+                                </article>
+                            }
+                        </div>
+                    </section>
+                }
+
+                <section class="details-meta-card">
+                    <h3 class="details-section-title">Key details</h3>
+                    <div class="details-meta-list">
+                        @foreach (var row in Model.KeyDetails)
+                        {
+                            <div class="details-meta-row">
+                                <div class="details-meta-label">@row.Label</div>
+                                <div class="details-meta-value">@row.Value</div>
+                            </div>
+                        }
+                    </div>
+                </section>
+
+                <div class="details-bottom-actions">
+                    <button class="button js-open-watch-modal"
+                            type="button"
+                            data-movie-id="@movie.Id"
+                            data-movie-title="@movie.Title"
+                            data-movie-genre="@movie.GenresCsv"
+                            data-primary-verdict="@(movie.PrimaryVerdict?.ToString() ?? string.Empty)"
+                            data-reason-tags="@reasonTags"
+                            data-return-url="@returnUrl"
+                            data-watched="@(isWatched ? "watched" : "unwatched")">
+                        Edit review
+                    </button>
+
+                    <form asp-action="Delete" method="post" class="details-delete-form">
                         @Html.AntiForgeryToken()
                         <input type="hidden" name="id" value="@movie.Id" />
-                        <button class="button" type="submit">Restore</button>
+                        <input type="hidden" name="returnUrl" value="@returnUrl" />
+                        <button class="button danger" type="submit">Delete</button>
                     </form>
-                }
-                <a class="button" asp-action="Edit" asp-route-id="@movie.Id">Full edit</a>
+                </div>
             </div>
-        </div>
-
-        <div class="prediction-panel">
-            <div>
-                <div class="prediction-label">Short summary</div>
-                <div class="prediction-text">@((movie.PredictedReason ?? "Prediction will improve as you review more watched titles."))</div>
-            </div>
-        </div>
-
-        <div class="section-block">
-            <h3>Decision table</h3>
-            <table class="decision-table">
-                <thead>
-                    <tr>
-                        <th>Parameter</th>
-                        <th>Current grade</th>
-                        <th>Weakest liked benchmark</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var row in Model.DecisionRows)
-                    {
-                        <tr>
-                            <td>@row.Parameter</td>
-                            <td>@row.CurrentGrade</td>
-                            <td>@row.Benchmark</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-
-        <div class="section-block">
-            <h3>Metadata</h3>
-            <dl class="detail-grid compact-detail-grid">
-                <dt>Genres</dt>
-                <dd>@(movie.GenresCsv ?? "-")</dd>
-                <dt>Runtime</dt>
-                <dd>@(movie.RuntimeMinutes.HasValue ? $"{movie.RuntimeMinutes} min" : "-")</dd>
-                <dt>Director</dt>
-                <dd>@(movie.Director ?? "-")</dd>
-                <dt>Actors</dt>
-                <dd>@(movie.Actors ?? "-")</dd>
-                <dt>Your score</dt>
-                <dd>@(movie.UserRating?.ToString("0.#") ?? "Not scored yet")</dd>
-                <dt>Your grade</dt>
-                <dd>@(LocalMovieVault.Web.Helpers.RecommendationViewHelper.GetGradeLabel(movie.UserGrade))</dd>
-                <dt>Feedback tags</dt>
-                <dd>@(movie.NormalizedTagsCsv ?? "Add tags from Review")</dd>
-            </dl>
-        </div>
-
-        <div class="section-block">
-            <h3>Story summary</h3>
-            <p>@(string.IsNullOrWhiteSpace(movie.Overview) ? "No overview yet." : movie.Overview)</p>
         </div>
     </div>
 </section>

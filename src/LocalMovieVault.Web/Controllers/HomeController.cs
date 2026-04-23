@@ -43,6 +43,7 @@ public class HomeController : Controller
 
         var model = new HomeDashboardViewModel
         {
+            TotalCount = movies.Count,
             SelectedGenre = genre,
             DefaultGenre = preferences.DefaultGenre,
             Genres = GenreHelper.CollectGenres(movies),
@@ -75,7 +76,8 @@ public class HomeController : Controller
         return View("Surprise", new SurpriseMovieViewModel
         {
             Pick = pick,
-            EligibleCount = eligible.Count
+            EligibleCount = eligible.Count,
+            TotalCount = pool.Count
         });
     }
 

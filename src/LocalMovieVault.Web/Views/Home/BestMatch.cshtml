@@ -1,18 +1,29 @@
+@using LocalMovieVault.Web.Helpers
+@using LocalMovieVault.Web.Models
 @model HomeDashboardViewModel
 @{
     ViewData["Title"] = "Best Match";
     ViewData["DismissScoreThreshold"] = 50m;
+    var featured = Model.TopMatches.FirstOrDefault();
+    var supporting = Model.TopMatches.Skip(1).ToList();
+    string GetFitLabel(decimal score) => score switch
+    {
+        >= 82m => "Strong fit",
+        >= 68m => "Good fit",
+        >= 52m => "Mixed fit",
+        >= 36m => "Risky fit",
+        _ => "Weak fit"
+    };
 }
 
-<section class="panel dashboard-shell">
-    <div class="section-head section-head-inline">
-        <div>
+<section class="panel dashboard-shell dashboard-shell-polished">
+    <div class="section-head section-head-inline dashboard-shell-head">
+        <div class="dashboard-title-row">
             <h1 class="section-title">Best Match</h1>
-            <div class="section-subtitle">Eligible movies: <strong>@Model.TopMatches.Count</strong></div>
         </div>
-        <form method="get" class="section-inline-form best-match-filter">
-            <div class="field-stack">
-                <label for="bestMatchGenre">Genre</label>
+        <form method="get" class="section-inline-form best-match-filter best-match-filter-inline">
+            <div class="field-stack field-stack-inline">
+                <label for="bestMatchGenre" class="best-match-filter-label">Genre</label>
                 <select id="bestMatchGenre" name="genre" onchange="this.form.submit()">
                     @foreach (var genre in Model.Genres)
                     {
@@ -23,18 +34,61 @@
         </form>
     </div>
 
-    @if (Model.TopMatches.Count == 0)
+    @if (featured is null)
     {
         <div class="empty-state">No active matches yet for this genre. Try another genre or review more watched titles.</div>
     }
     else
     {
-        <div class="movie-grid fixed-grid">
-            @foreach (var movie in Model.TopMatches)
-            {
-                <partial name="_DiscoveryCard" model="movie" />
-            }
-        </div>
+        var featuredScore = RecommendationViewHelper.GetDisplayMatchScore(featured);
+
+        <article class="feature-pick-card">
+            <div class="feature-pick-media">
+                <a asp-controller="Movies" asp-action="Details" asp-route-id="@featured.Id">
+                    @if (!string.IsNullOrWhiteSpace(featured.PosterUrl))
+                    {
+                        <img class="feature-pick-poster" src="@featured.PosterUrl" alt="Poster for @featured.Title" />
+                    }
+                    else
+                    {
+                        <div class="feature-pick-poster feature-pick-poster-placeholder">
+                            <span>@featured.Title</span>
+                        </div>
+                    }
+                </a>
+                <div class="feature-pick-overlay">
+                    <h2>@featured.Title</h2>
+                    <div class="feature-pick-meta">@(RecommendationViewHelper.SplitCsv(featured.GenresCsv).FirstOrDefault() ?? "No genre")@(featured.Year.HasValue ? $" - {featured.Year.Value}" : string.Empty)</div>
+                </div>
+            </div>
+            <div class="feature-pick-body">
+                <div class="feature-pick-metrics">
+                    <div class="feature-pick-metric feature-pick-metric-accent">
+                        <div class="feature-pick-metric-label">Match</div>
+                        <div class="feature-pick-metric-value">@featuredScore.ToString("0.#")</div>
+                    </div>
+                    <div class="feature-pick-metric">
+                        <div class="feature-pick-metric-label">IMDb</div>
+                        <div class="feature-pick-metric-value">@(featured.ImdbRating?.ToString("0.0") ?? "-")</div>
+                    </div>
+                    <div class="feature-pick-metric feature-pick-metric-fit">
+                        <div class="feature-pick-metric-label">Fit</div>
+                        <div class="feature-pick-metric-value">@GetFitLabel(featuredScore)</div>
+                    </div>
+                </div>
+            </div>
+        </article>
+
+        @if (supporting.Count > 0)
+        {
+            <div class="dashboard-supporting-head">More top matches</div>
+            <div class="movie-grid fixed-grid">
+                @foreach (var movie in supporting)
+                {
+                    <partial name="_DiscoveryCard" model="movie" />
+                }
+            </div>
+        }
     }
 </section>
 

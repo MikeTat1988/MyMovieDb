@@ -8,6 +8,7 @@ public static class AppStorageBootstrapper
     public const string DatabaseFileName = "localmovievault.db";
     public const string SettingsFileName = "mymoviedb.settings.json";
     public const string SeedFileName = "seed_movies.json";
+    public const string LogFileName = "app.log";
 
     public static AppStorageOptions Initialize(string contentRootPath, IConfiguration localConfiguration)
     {
@@ -23,6 +24,7 @@ public static class AppStorageBootstrapper
         var databasePath = Path.Combine(dataHomePath, DatabaseFileName);
         var settingsPath = Path.Combine(dataHomePath, SettingsFileName);
         var seedPath = Path.Combine(dataHomePath, SeedFileName);
+        var logPath = Path.Combine(dataHomePath, LogFileName);
 
         EnsureUserSettingsFile(settingsPath, localConfiguration);
         CopyLegacyDatabaseIfNeeded(databasePath, contentRootPath);
@@ -33,7 +35,8 @@ public static class AppStorageBootstrapper
             DataHomePath = dataHomePath,
             DatabasePath = databasePath,
             SettingsPath = settingsPath,
-            SeedPath = seedPath
+            SeedPath = seedPath,
+            LogPath = logPath
         };
     }
 
