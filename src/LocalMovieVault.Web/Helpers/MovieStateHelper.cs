@@ -4,6 +4,17 @@ namespace LocalMovieVault.Web.Helpers;
 
 public static class MovieStateHelper
 {
+    public static bool IsDismissSuggested(Movie movie, decimal dismissThreshold)
+    {
+        if (movie.IsDismissed || movie.WatchedStatus == WatchedStatus.Watched)
+        {
+            return false;
+        }
+
+        var score = RecommendationViewHelper.GetDisplayMatchScore(movie);
+        return score < dismissThreshold;
+    }
+
     public static bool NeedsReview(Movie movie, decimal dismissThreshold)
     {
         if (movie.IsDismissed)
@@ -22,8 +33,7 @@ public static class MovieStateHelper
             return true;
         }
 
-        var score = RecommendationViewHelper.GetDisplayMatchScore(movie);
-        return score < dismissThreshold;
+        return IsDismissSuggested(movie, dismissThreshold);
     }
 
     public static string? GetReviewBadge(Movie movie, decimal dismissThreshold)
@@ -44,8 +54,7 @@ public static class MovieStateHelper
             return "Review later";
         }
 
-        var score = RecommendationViewHelper.GetDisplayMatchScore(movie);
-        return score < dismissThreshold ? "Suggested dismiss" : null;
+        return IsDismissSuggested(movie, dismissThreshold) ? "Suggested dismiss" : null;
     }
 
     public static bool IsRecommendationCandidate(Movie movie, decimal dismissThreshold)

@@ -45,7 +45,7 @@ public sealed class MovieDetailsViewModel
         "the", "and", "for", "with", "this", "that", "from", "into", "your", "their", "have", "after", "before",
         "about", "through", "story", "movie", "film", "plot", "when", "they", "them", "then", "than", "hero",
         "heroes", "back", "take", "takes", "make", "made", "over", "under", "where", "while", "whose", "what",
-        "are", "art"
+        "are", "art", "group", "city", "face", "events", "event", "lives", "house", "world", "past", "future"
     };
 
     public required Movie Movie { get; init; }
@@ -53,21 +53,34 @@ public sealed class MovieDetailsViewModel
     public RecommendationContext? RecommendationContext { get; init; }
     public Movie? ReferenceMovie { get; init; }
     public List<ComparisonRow> ComparisonRows { get; init; } = [];
+    public int WowCount { get; init; }
+    public int WowLimit { get; init; }
     public string ReviewBadge => MovieStateHelper.GetReviewBadge(Movie, DismissScoreThreshold) ?? "Ready";
     public decimal DisplayScore => RecommendationViewHelper.GetDisplayMatchScore(Movie);
     public string FitLabel => GetFitLabel(DisplayScore);
+    public bool IsDismissed => Movie.IsDismissed;
+    public bool IsDismissSuggested => MovieStateHelper.IsDismissSuggested(Movie, DismissScoreThreshold);
+    public bool ShowDismissStatus => IsDismissed || IsDismissSuggested;
+    public string DismissStatusText => IsDismissed ? "Dismissed" : "Suggested dismiss";
     public bool ShowHeroReviewAction => Movie.WatchedStatus != WatchedStatus.Watched || !RecommendationViewHelper.HasCompletedReview(Movie);
     public string HeroSlotTitle => ShowHeroReviewAction
         ? "Review"
-        : RecommendationViewHelper.GetGradeLabel(Movie.UserGrade);
+        : "Your rating";
     public string HeroSlotSubtitle => ShowHeroReviewAction
         ? Movie.WatchedStatus == WatchedStatus.Watched ? "Finish your review" : "Add your watch verdict"
-        : "Your rating";
+        : ReviewedRatingText;
     public bool ShowComparison => ReferenceMovie is not null && ComparisonRows.Count > 0;
     public bool HasShortSummary => !string.IsNullOrWhiteSpace(Movie.Overview);
     public IReadOnlyList<KeyDetailRow> KeyDetails => BuildKeyDetails(Movie);
+    public bool CanToggleWow => WowPickHelper.CanAssignWow(Movie);
+    public bool IsWowPick => Movie.IsWowPick;
+    public bool WowSlotsAvailable => Movie.IsWowPick || WowCount < WowLimit;
+    public string WowStatusText => $"{WowCount} / {WowLimit} wow picks";
+    public string ReviewedRatingText => RecommendationViewHelper.HasCompletedReview(Movie)
+        ? $"{RecommendationViewHelper.GetGradeLabel(Movie.UserGrade)} ({RecommendationViewHelper.MapGradeToUserRating(Movie.UserGrade!.Value):0})"
+        : "Not finished";
 
-    public static MovieDetailsViewModel Create(Movie movie, decimal dismissScoreThreshold, Movie? referenceMovie = null)
+    public static MovieDetailsViewModel Create(Movie movie, decimal dismissScoreThreshold, int wowCount, int wowLimit, Movie? referenceMovie = null)
     {
         RecommendationContext? context = null;
         if (!string.IsNullOrWhiteSpace(movie.RecommendationContextJson))
@@ -86,6 +99,8 @@ public sealed class MovieDetailsViewModel
         {
             Movie = movie,
             DismissScoreThreshold = dismissScoreThreshold,
+            WowCount = wowCount,
+            WowLimit = wowLimit,
             RecommendationContext = context,
             ReferenceMovie = referenceMovie,
             ComparisonRows = BuildComparisonRows(movie, referenceMovie, context)
@@ -134,11 +149,14 @@ public sealed class MovieDetailsViewModel
         [
             new("Genres", string.IsNullOrWhiteSpace(movie.GenresCsv) ? "-" : movie.GenresCsv),
             new("Runtime", movie.RuntimeMinutes.HasValue ? $"{movie.RuntimeMinutes.Value} min" : "-"),
-            new("Status", movie.WatchedStatus == WatchedStatus.Watched
+            new("Status", movie.IsDismissed
+                ? "Dismissed"
+                : movie.WatchedStatus == WatchedStatus.Watched
                 ? (movie.NeedsTagReview ? "Under review" : "Watched")
                 : "Unwatched"),
+            new("Wow pick", movie.IsWowPick ? "Yes" : "No"),
             new("Your rating", RecommendationViewHelper.HasCompletedReview(movie)
-                ? RecommendationViewHelper.GetGradeLabel(movie.UserGrade)
+                ? $"{RecommendationViewHelper.GetGradeLabel(movie.UserGrade)} ({RecommendationViewHelper.MapGradeToUserRating(movie.UserGrade!.Value):0})"
                 : "Not finished")
         ];
 
@@ -166,13 +184,15 @@ public sealed class MovieDetailsViewModel
     private static string BuildStoryThemeSummary(Movie movie, RecommendationContext? context)
     {
         var values = ExtractFactorValues(context, "story:")
+            .Concat(RecommendationViewHelper.SplitCsv(movie.TmdbKeywordsCsv))
             .Concat(RecommendationViewHelper.SplitCsv(movie.PlotKeywordsCsv))
             .Select(CleanStoryValue)
             .Where(IsUsefulStoryValue)
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Take(3);
+            .Take(3)
+            .ToList();
 
-        return JoinForDisplay(values, "Limited story signal");
+        return values.Count < 2 ? "Limited story signal" : string.Join(", ", values);
     }
 
     private static string BuildToneSummary(Movie movie, RecommendationContext? context)

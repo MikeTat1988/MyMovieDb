@@ -33,6 +33,10 @@
                     <span>Review</span>
                     <span class="library-rail-count">@Model.ReviewCount</span>
                 </a>
+                <a class="library-rail-tab @(Model.Section == "wow" ? "is-active" : string.Empty)" asp-action="Index" asp-route-section="wow">
+                    <span>Wow</span>
+                    <span class="library-rail-count">@Model.WowCount/@Model.WowLimit</span>
+                </a>
                 <a class="library-rail-tab @(Model.Section == "dismissed" ? "is-active" : string.Empty)" asp-action="Index" asp-route-section="dismissed">
                     <span>Dismissed</span>
                     <span class="library-rail-count">@Model.DismissedCount</span>

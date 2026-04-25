@@ -50,6 +50,7 @@ public sealed class DatabaseSchemaMigrator
             ["RecommendationContextJson"] = "TEXT NULL",
             ["IsDismissed"] = "INTEGER NOT NULL DEFAULT 0",
             ["NeedsTagReview"] = "INTEGER NOT NULL DEFAULT 0",
+            ["IsWowPick"] = "INTEGER NOT NULL DEFAULT 0",
             ["DismissedUtc"] = "TEXT NULL",
             ["DismissedReasonTagsCsv"] = "TEXT NULL",
             ["TmdbId"] = "TEXT NULL"
@@ -73,7 +74,8 @@ public sealed class DatabaseSchemaMigrator
             "CREATE INDEX IF NOT EXISTS IX_Movies_UserGrade ON Movies (UserGrade);",
             "CREATE INDEX IF NOT EXISTS IX_Movies_PrimaryVerdict ON Movies (PrimaryVerdict);",
             "CREATE INDEX IF NOT EXISTS IX_Movies_IsDismissed ON Movies (IsDismissed);",
-            "CREATE INDEX IF NOT EXISTS IX_Movies_NeedsTagReview ON Movies (NeedsTagReview);"
+            "CREATE INDEX IF NOT EXISTS IX_Movies_NeedsTagReview ON Movies (NeedsTagReview);",
+            "CREATE INDEX IF NOT EXISTS IX_Movies_IsWowPick ON Movies (IsWowPick);"
         };
 
         foreach (var statement in indexStatements)

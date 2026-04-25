@@ -130,17 +130,6 @@
     </div>
 
     <div>
-        <label asp-for="UserRating"></label>
-        <select asp-for="UserRating">
-            <option value="">-</option>
-            @for (var rating = 1; rating <= 10; rating++)
-            {
-                <option value="@rating">@rating</option>
-            }
-        </select>
-    </div>
-
-    <div>
         <label asp-for="NeedsTagReview">Review needed</label>
         <input asp-for="NeedsTagReview" type="checkbox" />
     </div>

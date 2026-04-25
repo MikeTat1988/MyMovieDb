@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using LocalMovieVault.Web.Helpers;
 using LocalMovieVault.Web.Models;
@@ -27,8 +28,10 @@ public static class RecommendationCatalog
         ["Weak twist"] = ["twist", "reveal", "predictable"],
         ["Good pacing"] = ["fast-paced", "pace", "relentless", "tight"],
         ["Too slow"] = ["slow", "slow-burn", "patient", "measured"],
+        ["Boring"] = ["boring", "dull", "tedious", "dragging", "lifeless", "uninvolving"],
         ["Too long"] = ["long", "overlong", "bloated", "drags"],
         ["Confusing"] = ["confusing", "hard to follow", "incomprehensible", "messy"],
+        ["Weak story"] = ["weak story", "thin plot", "empty plot", "poor writing", "underwritten", "meandering", "no payoff"],
         ["Great acting"] = ["actor", "performance", "performances", "cast"],
         ["Weak acting"] = ["wooden", "stilted", "bad acting", "weak performance"],
         ["Believable characters"] = ["family", "character", "relationship", "human"],
@@ -64,8 +67,29 @@ public static class RecommendationCatalog
         "the", "and", "for", "with", "that", "this", "from", "into", "their", "about", "after", "before",
         "while", "where", "when", "over", "under", "through", "during", "have", "has", "had", "been", "will",
         "would", "could", "should", "than", "them", "they", "there", "what", "your", "you", "his", "her", "she",
-        "him", "our", "out", "not", "who", "whose", "which", "also", "just", "make", "made", "movie", "film"
+        "him", "our", "out", "not", "who", "whose", "which", "also", "just", "make", "made", "movie", "film",
+        "are", "but", "else", "ever", "into", "only", "seems", "include", "includes", "including", "around",
+        "inside", "outside", "within", "without", "upon", "across", "because", "until", "very", "more", "most",
+        "some", "such", "each", "many", "much", "another", "being", "becomes", "become", "becoming"
     };
+
+    private static readonly HashSet<string> GenericPlotWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "man", "woman", "boy", "girl", "group", "family", "friend", "friends", "people", "person", "someone",
+        "something", "life", "lives", "living", "city", "town", "world", "house", "home", "past", "future",
+        "events", "event", "face", "find", "finds", "found", "trying", "tries", "must", "forced", "young",
+        "older", "old", "cannot", "one", "two", "three"
+    };
+
+    public const string WeakActingSignal = "weak-acting";
+    public const string WeakWritingSignal = "weak-writing";
+    public const string WeakDialogueSignal = "weak-dialogue";
+    public const string WeakCinematographySignal = "weak-cinematography";
+    public const string ThinPlotSignal = "thin-plot";
+    public const string UnintentionalComedySignal = "unintentional-comedy";
+    public const string SoBadItsGoodSignal = "so-bad-it-good";
+    public const string PolarizingCultSignal = "polarizing-cult";
+    public const string SevereExternalQualityRiskSignal = "severe-external-quality-risk";
 
     public static int GetGradeWeight(UserGrade grade) => GradeScores[grade];
 
@@ -266,7 +290,127 @@ public static class RecommendationCatalog
 
     public static IReadOnlyDictionary<string, string[]> ReasonTagHintMap => ReasonTagKeywordHints;
     public static ISet<string> KeywordStopWords => StopWords;
+    public static ISet<string> GenericPlotKeywordWords => GenericPlotWords;
+
+    public static ReviewDerivedSignals ExtractReviewDerivedSignals(Movie movie)
+    {
+        var craftRisks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var tasteDescriptors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var specialCases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var qualitySignals = new List<ExternalQualitySignal>();
+
+        var qualityRisk = 0m;
+
+        if (movie.ImdbRating.HasValue && movie.ImdbVotes is >= 1000 && movie.ImdbRating.Value <= 4.5m)
+        {
+            var strength = Math.Clamp((4.5m - movie.ImdbRating.Value) * 20m, 10m, 35m);
+            qualitySignals.Add(new ExternalQualitySignal("low-imdb-rating", strength, "IMDb", true));
+            qualityRisk += strength;
+        }
+
+        if (movie.Metascore is <= 20)
+        {
+            var strength = Math.Clamp((40m - movie.Metascore.Value) * 0.75m, 10m, 30m);
+            qualitySignals.Add(new ExternalQualitySignal("low-metascore", strength, "Metacritic", true));
+            qualityRisk += strength;
+        }
+
+        var rottenTomatoes = TryGetRottenTomatoesScore(movie.ExternalRatingsJson);
+        if (rottenTomatoes is <= 30m)
+        {
+            var strength = Math.Clamp((45m - rottenTomatoes.Value) * 0.5m, 8m, 20m);
+            qualitySignals.Add(new ExternalQualitySignal("low-rotten-tomatoes", strength, "Rotten Tomatoes", true));
+            qualityRisk += strength;
+        }
+
+        if (qualityRisk >= 50m)
+        {
+            specialCases.Add(SevereExternalQualityRiskSignal);
+            if (qualitySignals.Count >= 3)
+            {
+                qualityRisk = Math.Max(qualityRisk, 80m);
+            }
+        }
+
+        if (IsKnownCultBadMovie(movie) && qualityRisk >= 45m)
+        {
+            craftRisks.Add(WeakActingSignal);
+            craftRisks.Add(WeakWritingSignal);
+            craftRisks.Add(WeakDialogueSignal);
+            craftRisks.Add(WeakCinematographySignal);
+            craftRisks.Add(ThinPlotSignal);
+            tasteDescriptors.Add(UnintentionalComedySignal);
+            specialCases.Add(SoBadItsGoodSignal);
+            specialCases.Add(PolarizingCultSignal);
+        }
+
+        var confidence = Math.Clamp(
+            (qualitySignals.Count * 20m)
+            + (IsKnownCultBadMovie(movie) ? 25m : 0m),
+            0m,
+            100m);
+
+        return new ReviewDerivedSignals(
+            craftRisks.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList(),
+            tasteDescriptors.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList(),
+            specialCases.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList(),
+            decimal.Round(Math.Clamp(qualityRisk, 0m, 100m), 1),
+            decimal.Round(confidence, 1),
+            qualitySignals);
+    }
 
     public static string NormalizeFeature(string value)
         => Regex.Replace(value.Trim().ToLowerInvariant(), @"\s+", " ");
+
+    private static bool IsKnownCultBadMovie(Movie movie)
+        => (movie.Title?.Trim().StartsWith("The Room", StringComparison.OrdinalIgnoreCase) ?? false)
+           && string.Equals(movie.Director?.Trim(), "Tommy Wiseau", StringComparison.OrdinalIgnoreCase);
+
+    private static decimal? TryGetRottenTomatoesScore(string? ratingsJson)
+    {
+        if (string.IsNullOrWhiteSpace(ratingsJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(ratingsJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            foreach (var item in document.RootElement.EnumerateArray())
+            {
+                var source = item.TryGetProperty("Source", out var sourceProperty)
+                    ? sourceProperty.GetString()
+                    : null;
+                if (!string.Equals(source, "Rotten Tomatoes", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var value = item.TryGetProperty("Value", out var valueProperty)
+                    ? valueProperty.GetString()
+                    : null;
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    return null;
+                }
+
+                var percent = value.Replace("%", string.Empty, StringComparison.Ordinal).Trim();
+                if (decimal.TryParse(percent, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed))
+                {
+                    return parsed;
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        return null;
+    }
 }

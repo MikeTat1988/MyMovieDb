@@ -27,8 +27,10 @@
 ## LLM collaboration rules
 - Before implementing, inspect current controllers, models, views, and tests.
 - For fast orientation, start with `docs/LLM_CONTEXT.md` before scanning the whole app.
+- For recommendation weight, hybrid/tone, anchor, evidence-wording, or preview-score tuning work, use the installed Codex skill `moviedb-recommendation-tuning` if available.
 - After implementing, run a build and relevant tests before claiming success.
 - Before every shell command, estimate runtime, tell the user `running ... supposed to run for ...`, and set an explicit timeout on the command. Never run open-ended commands in this workspace.
+- Prefer `rg` / `rg.exe` for text and file search when available. On this machine, the Codex-bundled `WindowsApps` copy was not executable (`Access is denied`), so a standalone WinGet ripgrep install was added and should be preferred via user `PATH`.
 - Never run the smoke executable directly from the shell without a repo-managed timeout. Use `scripts/run-smoke-tests.ps1`, which self-enforces build/run timeouts and kills stale `LocalMovieVault.Web.Tests` processes before and after the run.
 - Do not rely on outer tool timeouts alone for smoke tests. The child test process can outlive the caller and keep locks behind.
 - If the update should be delivered, run `build-release.bat` before finishing.

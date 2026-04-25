@@ -69,7 +69,7 @@ public class MovieEditViewModel
     [Display(Name = "My notes")]
     public string? Notes { get; set; }
 
-    [Display(Name = "My score")]
+    [Display(Name = "My rating")]
     [Range(0, 100)]
     public decimal? UserRating { get; set; }
 

@@ -5,10 +5,12 @@ namespace LocalMovieVault.Web.ViewModels;
 public class AddMoviePageViewModel
 {
     public string? LookupTitle { get; set; }
-    public int? LookupYear { get; set; } = 2026;
+    public int? LookupYear { get; set; }
     public string? LookupMessage { get; set; }
     public bool ShowSavePopup { get; set; }
+    public bool ShowEstimateModal { get; set; }
     public MovieEditViewModel Movie { get; set; } = new();
     public List<MetadataSearchCandidate> Candidates { get; set; } = new();
     public string? SelectedImdbId { get; set; }
+    public MovieDetailsViewModel? EstimatePreview { get; set; }
 }

@@ -38,6 +38,7 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => x.PrimaryVerdict);
             entity.HasIndex(x => x.IsDismissed);
             entity.HasIndex(x => x.NeedsTagReview);
+            entity.HasIndex(x => x.IsWowPick);
             entity.Property(x => x.Overview).HasColumnType("TEXT");
             entity.Property(x => x.Notes).HasColumnType("TEXT");
             entity.Property(x => x.Director).HasColumnType("TEXT");

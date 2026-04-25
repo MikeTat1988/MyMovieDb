@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MovieDb LLM Lab</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <header class="topbar">
+        <div>
+            <p class="eyebrow">Detachable experiment</p>
+            <h1>MovieDb LLM Lab</h1>
+        </div>
+        <div class="status" id="status">Loading...</div>
+    </header>
+
+    <main>
+        <section class="controls">
+            <label>
+                Candidates
+                <input id="count" type="number" min="1" max="20" value="5">
+            </label>
+            <label>
+                Ollama model
+                <select id="model">
+                    <option value="">Loading models...</option>
+                </select>
+            </label>
+            <label>
+                Codex model
+                <select id="codexModel">
+                    <option value="">Loading Codex...</option>
+                </select>
+            </label>
+            <label>
+                Temperature
+                <input id="temperature" type="number" min="0" max="1.5" step="0.1" value="0.3">
+            </label>
+            <button id="loadRaw" type="button">Run Raw MovieDb</button>
+            <button id="runOllama" type="button" class="primary">Run Ollama Analysis</button>
+            <button id="runCodex" type="button" class="primary alt">Run Codex Analysis</button>
+            <button id="runCompare" type="button" class="primary alt">Run All Three</button>
+            <button id="saveReport" type="button">Save Report</button>
+        </section>
+
+        <section class="timing" id="timing">
+            <div><span>Raw app</span><strong>-</strong></div>
+            <div><span>Ollama</span><strong>-</strong></div>
+            <div><span>Codex</span><strong>-</strong></div>
+            <div><span>Total</span><strong>-</strong></div>
+        </section>
+
+        <section class="codex-tools">
+            <div>
+                <h2>Manual Codex Timer</h2>
+                <p>Copy a candidate's Codex prompt into Codex, start the timer, then paste the answer beside the raw and Ollama lanes.</p>
+            </div>
+            <div class="timer-controls">
+                <button id="codexStart" type="button">Start</button>
+                <button id="codexStop" type="button">Stop</button>
+                <strong id="codexElapsed">0 ms</strong>
+            </div>
+        </section>
+
+        <section id="results" class="results"></section>
+    </main>
+
+    <template id="movieTemplate">
+        <article class="movie-card">
+            <header class="movie-header">
+                <div>
+                    <p class="eyebrow js-genres"></p>
+                    <h2 class="js-title"></h2>
+                </div>
+                <div class="score-pill js-score"></div>
+            </header>
+
+            <div class="lanes">
+                <section class="lane raw">
+                    <h3>MovieDb Raw</h3>
+                    <dl>
+                        <div><dt>Label</dt><dd class="js-label"></dd></div>
+                        <div><dt>Reason</dt><dd class="js-reason"></dd></div>
+                        <div><dt>Tags</dt><dd class="js-tags"></dd></div>
+                        <div><dt>Affinity / Confidence</dt><dd class="js-confidence"></dd></div>
+                    </dl>
+                    <details>
+                        <summary>Factors and anchors</summary>
+                        <pre class="js-factors"></pre>
+                    </details>
+                </section>
+
+                <section class="lane ollama">
+                    <h3>Ollama</h3>
+                    <p class="elapsed js-ollama-elapsed"></p>
+                    <pre class="js-ollama-output empty">Run Ollama analysis to fill this lane.</pre>
+                    <details>
+                        <summary>Prompt and raw response</summary>
+                        <button class="copy js-copy-ollama" type="button">Copy prompt</button>
+                        <pre class="js-ollama-prompt"></pre>
+                        <pre class="js-ollama-raw"></pre>
+                    </details>
+                </section>
+
+                <section class="lane codex">
+                    <h3>Codex</h3>
+                    <p class="elapsed js-codex-elapsed"></p>
+                    <pre class="js-codex-output empty">Run Codex analysis or paste manual notes here.</pre>
+                    <textarea class="js-codex-notes" placeholder="Optional manual notes or pasted Codex answer."></textarea>
+                    <details>
+                        <summary>Codex prompt</summary>
+                        <button class="copy js-copy-codex" type="button">Copy prompt</button>
+                        <pre class="js-codex-prompt"></pre>
+                    </details>
+                </section>
+            </div>
+        </article>
+    </template>
+
+    <script src="/app.js"></script>
+</body>
+</html>

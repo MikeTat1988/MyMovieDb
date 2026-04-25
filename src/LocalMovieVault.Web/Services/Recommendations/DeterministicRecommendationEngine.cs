@@ -15,6 +15,7 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
     private readonly IRecommendationExplainer _explainer;
     private readonly AppUserPreferencesService _preferencesService;
     private readonly ILogger<DeterministicRecommendationEngine> _logger;
+    private readonly RecommendationWeightProfile _weights;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false };
 
     public DeterministicRecommendationEngine(
@@ -22,12 +23,14 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
         IRecommendationFeatureExtractor featureExtractor,
         IRecommendationExplainer explainer,
         AppUserPreferencesService preferencesService,
+        RecommendationWeightProfile? weights = null,
         ILogger<DeterministicRecommendationEngine>? logger = null)
     {
         _dbContext = dbContext;
         _featureExtractor = featureExtractor;
         _explainer = explainer;
         _preferencesService = preferencesService;
+        _weights = weights ?? RecommendationWeightProfile.CreateDefault();
         _logger = logger ?? NullLogger<DeterministicRecommendationEngine>.Instance;
     }
 
@@ -92,7 +95,7 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
             results[movie.Id] = result;
         }
 
-        ApplyCalibratedScores(movies, results);
+        ApplyCalibratedScores(movies, results, features, _weights);
 
         foreach (var movie in movies)
         {
@@ -161,11 +164,14 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
             }
 
             profile.RatedMovies.Add(movie);
-            var weight = RecommendationCatalog.GetGradeWeight(movie.UserGrade.Value);
+            var weight = RecommendationCatalog.GetGradeWeight(movie.UserGrade.Value)
+                * GetWowProfileWeightMultiplier(movie, tuning);
             var movieFeatures = features[movie.Id];
 
             AddWeights(profile.GenreWeights, movieFeatures.Genres, weight * 2m * tuning.GenreAffinityWeight);
             AddWeights(profile.GenrePairWeights, movieFeatures.GenrePairs, weight * 2.2m);
+            AddWeights(profile.HybridSignalWeights, movieFeatures.HybridSignals, weight * 2.5m);
+            AddWeights(profile.ToneSignalWeights, movieFeatures.ToneSignals, weight * 2.1m);
             AddWeights(profile.DirectorWeights, movieFeatures.Directors, weight * 1.7m * tuning.CreatorAffinityWeight);
             AddWeights(profile.WriterWeights, movieFeatures.Writers, weight * 1.4m * tuning.CreatorAffinityWeight);
             AddWeights(profile.ActorWeights, movieFeatures.Actors, weight * 1.2m);
@@ -201,11 +207,14 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
 
         var profile = CloneProfile(baseProfile);
         var tuning = preferences.TasteTuning;
-        var weight = RecommendationCatalog.GetGradeWeight(movie.UserGrade.Value);
+        var weight = RecommendationCatalog.GetGradeWeight(movie.UserGrade.Value)
+            * GetWowProfileWeightMultiplier(movie, tuning);
 
         profile.RatedMovies.RemoveAll(x => x.Id == movie.Id);
         AddWeights(profile.GenreWeights, movieFeatures.Genres, -weight * 2m * tuning.GenreAffinityWeight);
         AddWeights(profile.GenrePairWeights, movieFeatures.GenrePairs, -weight * 2.2m);
+        AddWeights(profile.HybridSignalWeights, movieFeatures.HybridSignals, -weight * 2.5m);
+        AddWeights(profile.ToneSignalWeights, movieFeatures.ToneSignals, -weight * 2.1m);
         AddWeights(profile.DirectorWeights, movieFeatures.Directors, -weight * 1.7m * tuning.CreatorAffinityWeight);
         AddWeights(profile.WriterWeights, movieFeatures.Writers, -weight * 1.4m * tuning.CreatorAffinityWeight);
         AddWeights(profile.ActorWeights, movieFeatures.Actors, -weight * 1.2m);
@@ -238,8 +247,10 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
         var context = new RecommendationContext();
 
         var broadFit = 0m;
-        broadFit += ApplyFeatureWeights(context.PositiveFactors, context.NegativeFactors, "genre", featureSet.Genres, profile.GenreWeights, 1.3m * preferences.GenrePreferenceWeight * preferences.TasteTuning.GenreAffinityWeight);
-        broadFit += ApplyFeatureWeights(context.PositiveFactors, context.NegativeFactors, "genre mix", featureSet.GenrePairs, profile.GenrePairWeights, 1.0m);
+        broadFit += ApplyFeatureWeights(context.PositiveFactors, context.NegativeFactors, "genre", featureSet.Genres, profile.GenreWeights, 1.0m * preferences.GenrePreferenceWeight * preferences.TasteTuning.GenreAffinityWeight);
+        broadFit += ApplyFeatureWeights(context.PositiveFactors, context.NegativeFactors, "genre mix", featureSet.GenrePairs, profile.GenrePairWeights, 0.85m);
+        broadFit += ApplyFeatureWeights(context.PositiveFactors, context.NegativeFactors, "hybrid", featureSet.HybridSignals, profile.HybridSignalWeights, 1.15m);
+        broadFit += ApplyFeatureWeights(context.PositiveFactors, context.NegativeFactors, "tone", featureSet.ToneSignals, profile.ToneSignalWeights, 1.05m);
         broadFit += ApplyFeatureWeights(context.PositiveFactors, context.NegativeFactors, "director", featureSet.Directors, profile.DirectorWeights, 1.1m * preferences.TasteTuning.CreatorAffinityWeight);
         broadFit += ApplyFeatureWeights(context.PositiveFactors, context.NegativeFactors, "writer", featureSet.Writers, profile.WriterWeights, 1.0m * preferences.TasteTuning.CreatorAffinityWeight);
         broadFit += ApplyFeatureWeights(context.PositiveFactors, context.NegativeFactors, "actor", featureSet.Actors, profile.ActorWeights, 0.6m);
@@ -262,28 +273,53 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
             broadFit += ApplyFeatureWeight(context.PositiveFactors, context.NegativeFactors, "runtime", featureSet.RuntimeBucket, profile.RuntimeWeights, 0.4m);
         }
 
-        var similarity = ScoreSimilarity(movie, featureSet, profile, allMovies, features, context);
-        var affinityBase = Math.Clamp(24m + (broadFit * 3.1m) + (similarity * 28m), 0m, 100m);
+        var similarity = ScoreSimilarity(movie, featureSet, profile, allMovies, features, context, preferences);
+        var affinityBase = Math.Clamp(
+            _weights.AffinityBaseOffset + (broadFit * _weights.BroadFitScale) + (similarity * _weights.SimilarityScale),
+            0m,
+            100m);
         var positiveTagScore = context.PositiveFactors
             .Where(x => x.Label.StartsWith("tag:", StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(x => x.Weight)
             .Take(3)
-            .Sum(x => x.Weight * 2.6m);
+            .Sum(x => x.Weight * _weights.PositiveTagScoreScale);
         var negativeTagScore = context.NegativeFactors
             .Where(x => x.Label.StartsWith("tag:", StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(x => x.Weight)
             .Take(2)
-            .Sum(x => x.Weight * 2.8m);
+            .Sum(x => x.Weight * _weights.NegativeTagScoreScale);
         positiveTagScore = Math.Clamp(positiveTagScore, 0m, 22m);
         negativeTagScore = Math.Clamp(negativeTagScore, 0m, 18m);
 
         var affinityScore = Math.Clamp(
             affinityBase
-            + (positiveTagScore * 0.42m)
-            - (negativeTagScore * 0.56m),
+            + (positiveTagScore * _weights.PositiveTagContributionScale)
+            - (negativeTagScore * _weights.NegativeTagContributionScale),
             0m,
             100m);
-        var confidenceScore = CalculateConfidenceScore(featureSet, context, similarity, preferences);
+        var wowAnchorBonus = GetWowAnchorBonus(context, preferences);
+        if (wowAnchorBonus > 0m)
+        {
+            context.PositiveFactors.Add(new ExplanationFactor("priority: wow anchor", wowAnchorBonus, true));
+            affinityScore = Math.Clamp(affinityScore + wowAnchorBonus, 0m, 100m);
+        }
+        var confidenceScore = CalculateConfidenceScore(featureSet, context, similarity, preferences, _weights);
+        if (IsMostlyInferredMatch(featureSet, context))
+        {
+            confidenceScore = Math.Max(0m, confidenceScore - _weights.BroadMatchConfidencePenalty);
+            context.WarningFactors.Add("Broad match");
+        }
+
+        if (IsQuietAtmosphericMatch(featureSet))
+        {
+            confidenceScore = Math.Max(0m, confidenceScore - _weights.QuietAtmosphericConfidencePenalty);
+        }
+
+        if (IsWeakQuietAnchor(featureSet, context))
+        {
+            confidenceScore = Math.Max(0m, confidenceScore - _weights.WeakQuietAnchorConfidencePenalty);
+            context.WarningFactors.Add("Soft anchor");
+        }
         context.AffinityScore = decimal.Round(affinityScore, 1);
         context.ConfidenceScore = decimal.Round(confidenceScore, 1);
         context.FinalScore = decimal.Round(affinityScore, 1);
@@ -313,7 +349,8 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
         UserTasteProfile profile,
         IReadOnlyList<Movie> allMovies,
         IReadOnlyDictionary<int, RecommendationFeatureSet> features,
-        RecommendationContext context)
+        RecommendationContext context,
+        AppUserPreferences preferences)
     {
         if (profile.RatedMovies.Count == 0)
         {
@@ -336,6 +373,11 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
                 continue;
             }
 
+            if (ratedMovie.IsWowPick && RecommendationCatalog.GetGradeWeight(ratedMovie.UserGrade.Value) > 0)
+            {
+                similarity *= preferences.TasteTuning.WowSimilarityWeightMultiplier;
+            }
+
             if (RecommendationCatalog.GetGradeWeight(ratedMovie.UserGrade.Value) > 0)
             {
                 positive.Add((ratedMovie, similarity));
@@ -352,7 +394,8 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
             {
                 Title = item.Movie.Title,
                 Verdict = item.Movie.PrimaryVerdict ?? PersonalVerdict.Liked,
-                SimilarityScore = Math.Round(item.Score * 100m, 1)
+                SimilarityScore = Math.Round(item.Score * 100m, 1),
+                IsWowPick = item.Movie.IsWowPick
             });
         }
 
@@ -362,7 +405,8 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
             {
                 Title = item.Movie.Title,
                 Verdict = item.Movie.PrimaryVerdict ?? PersonalVerdict.AvoidType,
-                SimilarityScore = Math.Round(item.Score * 100m, 1)
+                SimilarityScore = Math.Round(item.Score * 100m, 1),
+                IsWowPick = item.Movie.IsWowPick
             });
         }
 
@@ -376,16 +420,19 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
             && movie.UserGrade.HasValue
             && !movie.NeedsTagReview;
 
-    private static decimal ComputeSimilarity(RecommendationFeatureSet left, RecommendationFeatureSet right)
+    private decimal ComputeSimilarity(RecommendationFeatureSet left, RecommendationFeatureSet right)
     {
         var total = 0m;
-        total += IntersectScore(left.Genres, right.Genres, 0.18m);
-        total += IntersectScore(left.GenrePairs, right.GenrePairs, 0.12m);
+        total += IntersectScore(left.Genres, right.Genres, 0.14m);
+        total += IntersectScore(left.GenrePairs, right.GenrePairs, 0.10m);
+        total += IntersectScore(left.HybridSignals, right.HybridSignals, 0.18m);
+        total += IntersectScore(left.ToneSignals, right.ToneSignals, 0.24m);
         total += IntersectScore(left.Directors, right.Directors, 0.14m);
         total += IntersectScore(left.Writers, right.Writers, 0.10m);
         total += IntersectScore(left.Actors, right.Actors, 0.08m);
         total += IntersectScore(left.PlotKeywords, right.PlotKeywords, 0.18m);
         total += IntersectScore(left.ReasonTagHints, right.ReasonTagHints, 0.20m);
+        total -= CalculateToneMismatchPenalty(left, right);
         return total;
     }
 
@@ -568,6 +615,8 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
         var clone = new UserTasteProfile();
         CopyWeights(source.GenreWeights, clone.GenreWeights);
         CopyWeights(source.GenrePairWeights, clone.GenrePairWeights);
+        CopyWeights(source.HybridSignalWeights, clone.HybridSignalWeights);
+        CopyWeights(source.ToneSignalWeights, clone.ToneSignalWeights);
         CopyWeights(source.DirectorWeights, clone.DirectorWeights);
         CopyWeights(source.WriterWeights, clone.WriterWeights);
         CopyWeights(source.ActorWeights, clone.ActorWeights);
@@ -599,30 +648,51 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
         return importantBoost;
     }
 
+    private static decimal GetWowAnchorBonus(RecommendationContext context, AppUserPreferences preferences)
+    {
+        var strongestWowAnchor = context.SimilarToLiked
+            .Where(x => x.IsWowPick)
+            .OrderByDescending(x => x.SimilarityScore)
+            .FirstOrDefault();
+        if (strongestWowAnchor is null || strongestWowAnchor.SimilarityScore < preferences.TasteTuning.WowMinimumSimilarityForBoost)
+        {
+            return 0m;
+        }
+
+        var normalizedStrength = Math.Min(1m, strongestWowAnchor.SimilarityScore / 30m);
+        return decimal.Round(preferences.TasteTuning.WowFinalBoost * normalizedStrength, 2);
+    }
+
+    private static decimal GetWowProfileWeightMultiplier(Movie movie, TasteTuningSettings tuning)
+        => movie.IsWowPick ? tuning.WowProfileWeightMultiplier : 1.0m;
+
     private static decimal CalculateConfidenceScore(
         RecommendationFeatureSet featureSet,
         RecommendationContext context,
         decimal similarity,
-        AppUserPreferences preferences)
+        AppUserPreferences preferences,
+        RecommendationWeightProfile weights)
     {
         var strongPositiveCount = context.PositiveFactors.Count(x => x.Weight >= 0.8m);
         var strongNegativeCount = context.NegativeFactors.Count(x => x.Weight >= 0.8m);
-        var similarityEvidence = Math.Clamp(Math.Abs(similarity) * 100m, 0m, 22m);
+        var similarityEvidence = Math.Clamp(Math.Abs(similarity) * 100m, 0m, weights.SimilarityEvidenceCap);
 
         return Math.Clamp(
-            18m
-            + (featureSet.MetadataQualityScore * 0.34m)
-            + (featureSet.QualityConfidence * 0.22m * preferences.ImdbPreferenceWeight)
-            + (strongPositiveCount * 4.5m)
+            weights.ConfidenceBaseOffset
+            + (featureSet.MetadataQualityScore * weights.MetadataConfidenceScale)
+            + (featureSet.QualityConfidence * weights.QualityConfidenceScale * preferences.ImdbPreferenceWeight)
+            + (strongPositiveCount * weights.StrongPositiveConfidenceScale)
             + similarityEvidence
-            - (strongNegativeCount * 1.5m),
+            - (strongNegativeCount * weights.StrongNegativeConfidencePenaltyScale),
             0m,
             100m);
     }
 
-    private static void ApplyCalibratedScores(
+    private void ApplyCalibratedScores(
         IReadOnlyList<Movie> movies,
-        IDictionary<int, RecommendationResult> results)
+        IDictionary<int, RecommendationResult> results,
+        IReadOnlyDictionary<int, RecommendationFeatureSet> features,
+        RecommendationWeightProfile weights)
     {
         var ordered = movies
             .Select(movie => (Movie: movie, Result: results[movie.Id]))
@@ -638,14 +708,20 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
             var percentile = ordered.Count == 1
                 ? 1m
                 : 1m - (index / (decimal)(ordered.Count - 1));
-            var rankBonus = percentile * 2.5m;
-            var confidenceAdjustment = (entry.Result.Context.ConfidenceScore - 58m) * 0.08m;
+            var rankBonus = percentile * weights.RankBonusScale;
+            var confidenceAdjustment = (entry.Result.Context.ConfidenceScore - weights.ConfidenceCenter) * weights.ConfidenceAdjustmentScale;
+            var calibrationPenalty = GetCalibrationPenalty(entry.Movie, entry.Result, features[entry.Movie.Id], weights);
             var calibratedScore = Math.Clamp(
-                (entry.Result.PersonalMatchScore * 0.87m)
+                (entry.Result.PersonalMatchScore * weights.FinalScoreScale)
                 + rankBonus
                 + confidenceAdjustment,
                 0m,
-                94m);
+                weights.FinalScoreCap);
+
+            calibratedScore = Math.Clamp(
+                calibratedScore - calibrationPenalty,
+                0m,
+                weights.FinalScoreCap);
 
             entry.Result.FinalScore = decimal.Round(calibratedScore, 1);
             entry.Result.Context.FinalScore = entry.Result.FinalScore;
@@ -716,5 +792,135 @@ public sealed class DeterministicRecommendationEngine : IRecommendationEngine
             "Too slow" or "Too long" => tuning.NegativePacingPenaltyWeight,
             _ => 1.0m
         };
+    }
+
+    private decimal CalculateToneMismatchPenalty(RecommendationFeatureSet left, RecommendationFeatureSet right)
+    {
+        var leftTones = left.ToneSignals.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var rightTones = right.ToneSignals.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var leftHybrids = left.HybridSignals.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var rightHybrids = right.HybridSignals.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var penalty = 0m;
+
+        if (leftHybrids.Contains("comedy-hybrid") != rightHybrids.Contains("comedy-hybrid"))
+        {
+            penalty += _weights.ComedyHybridMismatchPenalty;
+        }
+
+        if (HasToneConflict(leftTones, rightTones, "humorous", "serious"))
+        {
+            penalty += _weights.HumorousSeriousMismatchPenalty;
+        }
+
+        if (HasToneConflict(leftTones, rightTones, "playful", "dread"))
+        {
+            penalty += _weights.PlayfulDreadMismatchPenalty;
+        }
+
+        if (HasToneConflict(leftTones, rightTones, "spectacle", "atmospheric"))
+        {
+            penalty += _weights.SpectacleAtmosphericMismatchPenalty;
+        }
+
+        if (HasToneConflict(leftTones, rightTones, "kinetic", "reflective"))
+        {
+            penalty += _weights.KineticReflectiveMismatchPenalty;
+        }
+
+        if (HasToneConflict(leftTones, rightTones, "quiet-dread", "intense-horror"))
+        {
+            penalty += _weights.QuietIntenseMismatchPenalty;
+        }
+
+        return penalty;
+    }
+
+    private static bool HasToneConflict(IReadOnlySet<string> left, IReadOnlySet<string> right, string first, string second)
+    {
+        return (left.Contains(first) && right.Contains(second)) || (left.Contains(second) && right.Contains(first));
+    }
+
+    private static bool IsMostlyInferredMatch(RecommendationFeatureSet featureSet, RecommendationContext context)
+    {
+        var hasExplicitTasteEvidence = context.PositiveFactors.Any(x =>
+            x.Label.StartsWith("tag:", StringComparison.OrdinalIgnoreCase)
+            || x.Label.StartsWith("priority:", StringComparison.OrdinalIgnoreCase));
+
+        var hasRichMetadataSignals = featureSet.Directors.Count > 0
+            || featureSet.Writers.Count > 0
+            || featureSet.Actors.Count >= 2;
+
+        var toneDrivenPositives = context.PositiveFactors.Count(x =>
+            x.Label.StartsWith("tone:", StringComparison.OrdinalIgnoreCase)
+            || x.Label.StartsWith("hybrid:", StringComparison.OrdinalIgnoreCase));
+
+        return !hasExplicitTasteEvidence && !hasRichMetadataSignals && toneDrivenPositives >= 2;
+    }
+
+    private decimal GetCalibrationPenalty(Movie movie, RecommendationResult result, RecommendationFeatureSet featureSet, RecommendationWeightProfile weights)
+    {
+        if (movie.WatchedStatus == WatchedStatus.Watched)
+        {
+            return 0m;
+        }
+
+        var penalty = 0m;
+
+        if (IsMostlyInferredMatch(featureSet, result.Context))
+        {
+            penalty += weights.InferredCalibrationPenalty;
+        }
+
+        if (IsQuietAtmosphericMatch(featureSet))
+        {
+            penalty += weights.QuietAtmosphericCalibrationPenalty;
+        }
+
+        if (featureSet.HybridSignals.Contains("horror+drama", StringComparer.OrdinalIgnoreCase)
+            && !featureSet.ToneSignals.Contains("intense-horror", StringComparer.OrdinalIgnoreCase))
+        {
+            penalty += weights.HorrorDramaCalibrationPenalty;
+        }
+
+        if (featureSet.Countries.Contains("india", StringComparer.OrdinalIgnoreCase))
+        {
+            penalty += weights.IndiaCalibrationPenalty;
+        }
+
+        if (IsWeakQuietAnchor(featureSet, result.Context))
+        {
+            penalty += weights.WeakQuietAnchorCalibrationPenalty;
+        }
+
+        if (penalty > 0m && result.Context.ConfidenceScore < 68m && result.PersonalMatchScore >= 88m)
+        {
+            penalty += weights.TopBandGuardPenalty;
+        }
+
+        return penalty;
+    }
+
+    private static bool IsQuietAtmosphericMatch(RecommendationFeatureSet featureSet)
+    {
+        var tones = featureSet.ToneSignals;
+        return tones.Contains("quiet-dread", StringComparer.OrdinalIgnoreCase)
+            || (tones.Contains("atmospheric", StringComparer.OrdinalIgnoreCase)
+                && !tones.Contains("intense-horror", StringComparer.OrdinalIgnoreCase)
+                && featureSet.Genres.Contains("horror", StringComparer.OrdinalIgnoreCase));
+    }
+
+    private bool IsWeakQuietAnchor(RecommendationFeatureSet featureSet, RecommendationContext context)
+    {
+        if (!IsQuietAtmosphericMatch(featureSet))
+        {
+            return false;
+        }
+
+        var bestLikedSimilarity = context.SimilarToLiked.Count == 0
+            ? 0m
+            : context.SimilarToLiked.Max(x => x.SimilarityScore);
+
+        return bestLikedSimilarity > 0m && bestLikedSimilarity < _weights.WeakQuietAnchorSimilarityThreshold;
     }
 }

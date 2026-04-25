@@ -1,0 +1,153 @@
+@using LocalMovieVault.Web.Models
+@model AddMoviePageViewModel
+@{
+    var preview = Model.EstimatePreview!;
+    var movie = preview.Movie;
+}
+
+<div class="modal-backdrop app-modal is-hidden" id="estimatePreviewModal" aria-hidden="true">
+    <div class="modal-panel modal-panel-estimate">
+        <div class="panel-header compact-header-gap">
+            <div>
+                <div class="eyebrow">Estimated match</div>
+                <h2>@movie.Title</h2>
+                <div class="panel-subtitle">This is the same recommendation breakdown you would see for a movie already inside your library.</div>
+            </div>
+            <button type="button" class="button subtle js-close-modal">Close</button>
+        </div>
+
+        <div class="estimate-modal-layout">
+            <aside class="details-poster-panel">
+                @if (!string.IsNullOrWhiteSpace(movie.PosterUrl))
+                {
+                    <img class="details-poster" src="@movie.PosterUrl" alt="Poster for @movie.Title" />
+                }
+                else
+                {
+                    <div class="details-poster-placeholder">
+                        <div class="details-poster-placeholder-badge">Poster unavailable</div>
+                        <div class="details-poster-placeholder-title">@movie.Title</div>
+                        <div class="details-poster-placeholder-meta">@(movie.Year?.ToString() ?? "Unknown year")</div>
+                    </div>
+                }
+            </aside>
+
+            <div class="details-main-column">
+                <div class="details-hero-metrics details-hero-metrics-full">
+                    <div class="detail-hero-metric detail-hero-metric-accent">
+                        <div class="detail-hero-label">Match</div>
+                        <div class="detail-hero-value">@preview.DisplayScore.ToString("0.#")</div>
+                    </div>
+                    <div class="detail-hero-metric">
+                        <div class="detail-hero-label">IMDb</div>
+                        <div class="detail-hero-value">@(movie.ImdbRating?.ToString("0.0") ?? "-")</div>
+                    </div>
+                    <div class="detail-hero-metric detail-hero-metric-fit">
+                        <div class="detail-hero-label">Fit</div>
+                        <div class="detail-hero-value">@preview.FitLabel</div>
+                    </div>
+                </div>
+
+                @if (preview.HasShortSummary)
+                {
+                    <section class="details-info-card">
+                        <div class="details-info-label">Short summary</div>
+                        <p class="details-info-copy">@movie.Overview</p>
+                    </section>
+                }
+
+                <section class="details-info-card">
+                    <div class="details-info-label">Rating explanation</div>
+                    <p class="details-info-copy">@movie.PredictedReason</p>
+                </section>
+
+                @if (preview.ShowComparison)
+                {
+                    <section class="details-compare-card">
+                        <div class="details-compare-head">
+                            <h2>Comparison vs @preview.ReferenceMovie!.Title</h2>
+                        </div>
+
+                        <div class="details-compare-table">
+                            <div class="details-compare-head-cell">Parameter</div>
+                            <div class="details-compare-head-cell">@movie.Title</div>
+                            <div class="details-compare-head-cell">@preview.ReferenceMovie!.Title</div>
+
+                            @foreach (var row in preview.ComparisonRows)
+                            {
+                                <div class="details-compare-cell details-compare-label">@row.Parameter</div>
+                                <div class="details-compare-cell details-compare-value">@row.CurrentValue</div>
+                                <div class="details-compare-cell details-compare-value">@row.ReferenceValue</div>
+                                @if (!string.IsNullOrWhiteSpace(row.Note))
+                                {
+                                    <div class="details-compare-row-note details-compare-row-note-desktop">@row.Note</div>
+                                }
+                            }
+                        </div>
+
+                        <div class="details-compare-stack">
+                            @foreach (var row in preview.ComparisonRows)
+                            {
+                                <article class="details-compare-row">
+                                    <div class="details-compare-row-parameter">@row.Parameter</div>
+                                    <div class="details-compare-row-sides">
+                                        <div class="details-compare-row-side">
+                                            <span class="details-compare-row-side-label">This movie</span>
+                                            <strong>@row.CurrentValue</strong>
+                                        </div>
+                                        <div class="details-compare-row-side">
+                                            <span class="details-compare-row-side-label">Reference</span>
+                                            <strong>@row.ReferenceValue</strong>
+                                        </div>
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(row.Note))
+                                    {
+                                        <div class="details-compare-row-note">@row.Note</div>
+                                    }
+                                </article>
+                            }
+                        </div>
+                    </section>
+                }
+
+                <section class="details-meta-card">
+                    <h3 class="details-section-title">Key details</h3>
+                    <div class="details-meta-list">
+                        @foreach (var row in preview.KeyDetails)
+                        {
+                            <div class="details-meta-row">
+                                <div class="details-meta-label">@row.Label</div>
+                                <div class="details-meta-value">@row.Value</div>
+                            </div>
+                        }
+                    </div>
+                </section>
+
+                <div class="estimate-actions-card">
+                    <div>
+                        <div class="details-info-label">Add to library</div>
+                        <div class="field-help">Choose the state you want before adding this movie.</div>
+                    </div>
+
+                    <div class="segmented-control segmented-control-tight segmented-control-wrap" data-estimate-watched-toggle="true">
+                        <label class="segment-button @(Model.Movie.WatchedStatus == WatchedStatus.Watched ? "is-active" : string.Empty)">
+                            <input type="radio" name="estimateWatchedStatus" value="@WatchedStatus.Watched" @(Model.Movie.WatchedStatus == WatchedStatus.Watched ? "checked" : null) />
+                            Watched
+                        </label>
+                        <label class="segment-button @(Model.Movie.WatchedStatus != WatchedStatus.Watched ? "is-active" : string.Empty)">
+                            <input type="radio" name="estimateWatchedStatus" value="@WatchedStatus.NotWatched" @(Model.Movie.WatchedStatus != WatchedStatus.Watched ? "checked" : null) />
+                            Not watched
+                        </label>
+                    </div>
+
+                    <div class="modal-action-row estimate-action-row">
+                        <button class="button subtle js-close-modal" type="button">Back to results</button>
+                        <button class="button primary js-add-movie-submit" type="submit" form="addMovieSaveForm" data-add-submit-mode="add">Add to library</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<button class="js-auto-open-estimate-modal" type="button" hidden>Auto open estimate preview</button>

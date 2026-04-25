@@ -29,6 +29,7 @@ public class MoviesController : Controller
     private readonly MetadataBackfillService _metadataBackfillService;
     private readonly AppUserPreferencesService _preferencesService;
     private readonly AppEventLogService _appEventLogService;
+    private readonly DeterministicRecommendationEngine _recommendationEngine;
 
     public MoviesController(
         AppDbContext dbContext,
@@ -37,6 +38,7 @@ public class MoviesController : Controller
         PersonalMatchService personalMatchService,
         MetadataBackfillService metadataBackfillService,
         AppUserPreferencesService preferencesService,
+        IRecommendationEngine recommendationEngine,
         AppEventLogService? appEventLogService = null)
     {
         _dbContext = dbContext;
@@ -45,6 +47,7 @@ public class MoviesController : Controller
         _personalMatchService = personalMatchService;
         _metadataBackfillService = metadataBackfillService;
         _preferencesService = preferencesService;
+        _recommendationEngine = (DeterministicRecommendationEngine)recommendationEngine;
         _appEventLogService = appEventLogService ?? new AppEventLogService(dbContext);
     }
 
@@ -53,11 +56,14 @@ public class MoviesController : Controller
     {
         var preferences = _preferencesService.Get();
         var allMovies = await _dbContext.Movies.ToListAsync(cancellationToken);
+        var hasQuery = !string.IsNullOrWhiteSpace(query);
         var genres = GenreHelper.CollectGenres(allMovies);
         var notWatchedCount = allMovies.Count(x => x.WatchedStatus != WatchedStatus.Watched && !x.IsDismissed && !MovieStateHelper.NeedsReview(x, preferences.DismissScoreThreshold));
         var watchedCount = allMovies.Count(x => x.WatchedStatus == WatchedStatus.Watched && !x.IsDismissed);
         var reviewCount = allMovies.Count(x => MovieStateHelper.NeedsReview(x, preferences.DismissScoreThreshold));
         var dismissedCount = allMovies.Count(x => x.IsDismissed);
+        var wowCount = allMovies.Count(x => x.IsWowPick);
+        var wowLimit = WowPickHelper.GetWowLimit(allMovies.Count, preferences);
 
         IEnumerable<Movie> movies = allMovies;
 
@@ -80,13 +86,17 @@ public class MoviesController : Controller
             movies = movies.Where(x => GenreHelper.MatchesGenre(x, genre));
         }
 
-        movies = section switch
+        if (!hasQuery)
         {
-            "watched" => movies.Where(x => x.WatchedStatus == WatchedStatus.Watched && !x.IsDismissed),
-            "review" => movies.Where(x => MovieStateHelper.NeedsReview(x, preferences.DismissScoreThreshold)),
-            "dismissed" => movies.Where(x => x.IsDismissed),
-            _ => movies.Where(x => x.WatchedStatus != WatchedStatus.Watched && !x.IsDismissed && !MovieStateHelper.NeedsReview(x, preferences.DismissScoreThreshold))
-        };
+            movies = section switch
+            {
+                "watched" => movies.Where(x => x.WatchedStatus == WatchedStatus.Watched && !x.IsDismissed),
+                "review" => movies.Where(x => MovieStateHelper.NeedsReview(x, preferences.DismissScoreThreshold)),
+                "dismissed" => movies.Where(x => x.IsDismissed),
+                "wow" => movies.Where(x => x.IsWowPick && !x.IsDismissed),
+                _ => movies.Where(x => x.WatchedStatus != WatchedStatus.Watched && !x.IsDismissed && !MovieStateHelper.NeedsReview(x, preferences.DismissScoreThreshold))
+            };
+        }
 
         var orderedMovies = sortBy switch
         {
@@ -111,6 +121,8 @@ public class MoviesController : Controller
             WatchedCount = watchedCount,
             ReviewCount = reviewCount,
             DismissedCount = dismissedCount,
+            WowCount = wowCount,
+            WowLimit = wowLimit,
             Section = section,
             Query = query,
             Genre = genre,
@@ -134,7 +146,9 @@ public class MoviesController : Controller
 
         var preferences = _preferencesService.Get();
         var referenceMovie = await ResolveReferenceMovieAsync(movie, cancellationToken);
-        return View("MovieDetails", MovieDetailsViewModel.Create(movie, preferences.DismissScoreThreshold, referenceMovie));
+        var wowCount = await _dbContext.Movies.CountAsync(x => x.IsWowPick, cancellationToken);
+        var wowLimit = WowPickHelper.GetWowLimit(await _dbContext.Movies.CountAsync(cancellationToken), preferences);
+        return View("MovieDetails", MovieDetailsViewModel.Create(movie, preferences.DismissScoreThreshold, wowCount, wowLimit, referenceMovie));
     }
 
     private async Task<Movie?> ResolveReferenceMovieAsync(Movie movie, CancellationToken cancellationToken)
@@ -154,10 +168,10 @@ public class MoviesController : Controller
             context = null;
         }
 
-        var referenceTitle = context?.SimilarToLiked
+        var referenceSummary = context?.SimilarToLiked
             .OrderByDescending(x => x.SimilarityScore)
-            .Select(x => x.Title)
-            .FirstOrDefault(x => !string.IsNullOrWhiteSpace(x));
+            .FirstOrDefault(x => !string.IsNullOrWhiteSpace(x.Title));
+        var referenceTitle = referenceSummary?.Title;
         if (string.IsNullOrWhiteSpace(referenceTitle))
         {
             return null;
@@ -168,11 +182,64 @@ public class MoviesController : Controller
             .Where(x => x.Id != movie.Id && x.NormalizedTitle == normalizedTitle)
             .ToListAsync(cancellationToken);
 
-        return candidates
+        var referenceMovie = candidates
             .OrderByDescending(x => x.WatchedStatus == WatchedStatus.Watched)
             .ThenByDescending(x => x.UserRating ?? decimal.MinValue)
             .ThenByDescending(x => x.PredictedScore ?? decimal.MinValue)
             .FirstOrDefault();
+
+        return referenceMovie is not null && IsReferenceMovieStrongEnough(movie, referenceMovie, context!, referenceSummary!)
+            ? referenceMovie
+            : null;
+    }
+
+    private static bool IsReferenceMovieStrongEnough(Movie movie, Movie referenceMovie, RecommendationContext context, SimilarMovieSummary referenceSummary)
+    {
+        if (referenceSummary.SimilarityScore >= 24m)
+        {
+            return true;
+        }
+
+        var currentGenres = RecommendationViewHelper.SplitCsv(movie.GenresCsv)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var referenceGenres = RecommendationViewHelper.SplitCsv(referenceMovie.GenresCsv)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var sharedGenres = currentGenres.Intersect(referenceGenres, StringComparer.OrdinalIgnoreCase).Count();
+
+        var currentSignals = ExtractSemanticSignals(context);
+        var referenceSignals = RecommendationViewHelper.SplitCsv(referenceMovie.NormalizedTagsCsv ?? referenceMovie.ReasonTagsCsv)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var sharedSignals = currentSignals.Intersect(referenceSignals, StringComparer.OrdinalIgnoreCase).Count();
+
+        if (IsMixedComedyMismatch(currentGenres, referenceGenres) && sharedSignals == 0)
+        {
+            return false;
+        }
+
+        if (sharedSignals > 0 && referenceSummary.SimilarityScore >= 12m)
+        {
+            return true;
+        }
+
+        return sharedGenres >= 2 && referenceSummary.SimilarityScore >= 18m;
+    }
+
+    private static HashSet<string> ExtractSemanticSignals(RecommendationContext context)
+    {
+        return context.PositiveFactors
+            .Where(x => x.Label.StartsWith("tag:", StringComparison.OrdinalIgnoreCase)
+                || x.Label.StartsWith("priority:", StringComparison.OrdinalIgnoreCase))
+            .Select(x => x.Label)
+            .Select(label => label.Split(':', 2)[1].Trim())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool IsMixedComedyMismatch(IReadOnlySet<string> currentGenres, IReadOnlySet<string> referenceGenres)
+    {
+        var currentIsComedyHybrid = currentGenres.Contains("Comedy") && currentGenres.Count > 1;
+        var referenceIsComedyHybrid = referenceGenres.Contains("Comedy") && referenceGenres.Count > 1;
+        return currentIsComedyHybrid != referenceIsComedyHybrid;
     }
 
     [HttpGet]
@@ -185,7 +252,7 @@ public class MoviesController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Lookup(AddMoviePageViewModel model, CancellationToken cancellationToken)
     {
-        var candidates = await _metadataService.SearchCandidatesAsync(model.LookupTitle ?? string.Empty, model.LookupYear, 5, cancellationToken);
+        var candidates = await _metadataService.SearchCandidatesAsync(model.LookupTitle ?? string.Empty, model.LookupYear, 10, cancellationToken);
         model.Candidates = candidates.ToList();
 
         if (model.Candidates.Count == 0)
@@ -235,7 +302,7 @@ public class MoviesController : Controller
             LookupYear = lookupYear
         };
 
-        model.Candidates = (await _metadataService.SearchCandidatesAsync(lookupTitle ?? string.Empty, lookupYear, 5, cancellationToken)).ToList();
+        model.Candidates = (await _metadataService.SearchCandidatesAsync(lookupTitle ?? string.Empty, lookupYear, 10, cancellationToken)).ToList();
 
         var result = await _metadataService.LookupByImdbIdAsync(imdbId, cancellationToken);
         if (!result.Success)
@@ -252,6 +319,17 @@ public class MoviesController : Controller
         model.Movie = MapLookupResult(result);
         model.SelectedImdbId = imdbId;
         return View("Add", model);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> PreviewEstimate([Bind(Prefix = "Movie")] MovieEditViewModel model, string? lookupTitle, int? lookupYear, string? selectedImdbId, CancellationToken cancellationToken)
+    {
+        var addModel = await BuildAddPageModelAsync(model, lookupTitle, lookupYear, selectedImdbId, cancellationToken);
+        addModel.LookupMessage = "Estimated match preview ready.";
+        addModel.ShowEstimateModal = true;
+        addModel.EstimatePreview = await BuildEstimatePreviewAsync(model, cancellationToken);
+        return View("Add", addModel);
     }
 
     [HttpPost]
@@ -473,6 +551,7 @@ public class MoviesController : Controller
         }
 
         movie.IsDismissed = true;
+        movie.IsWowPick = false;
         movie.DismissedUtc = DateTime.UtcNow;
         movie.DismissedReasonTagsCsv = RecommendationViewHelper.JoinCsv((reasonTags ?? []).Take(RecommendationViewHelper.MaxReasonTags));
 
@@ -530,36 +609,27 @@ public class MoviesController : Controller
             new { movie.IsDismissed, movie.WatchedStatus },
             cancellationToken);
 
+        if (IsAjaxRequest())
+        {
+            return Json(new { success = true, restored = true });
+        }
+
         TempData["StatusMessage"] = "Movie restored.";
         return RedirectToLocalOr(returnUrl, nameof(Index));
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Create([Bind(Prefix = "Movie")] MovieEditViewModel model, string? lookupTitle, int? lookupYear, string? selectedImdbId, CancellationToken cancellationToken)
+    public async Task<IActionResult> Create([Bind(Prefix = "Movie")] MovieEditViewModel model, string? lookupTitle, int? lookupYear, string? selectedImdbId, PersonalVerdict? addVerdict, List<string>? addReasonTags, bool queueForReview, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
         {
-            var addModel = new AddMoviePageViewModel
-            {
-                LookupTitle = lookupTitle ?? model.Title,
-                LookupYear = lookupYear ?? model.Year ?? DateTime.UtcNow.Year,
-                LookupMessage = "Please check the required fields.",
-                ShowSavePopup = true,
-                Movie = model,
-                SelectedImdbId = selectedImdbId,
-                Candidates = (await _metadataService.SearchCandidatesAsync(lookupTitle ?? model.Title, lookupYear ?? model.Year, 5, cancellationToken)).ToList()
-            };
-
+            var addModel = await BuildAddPageModelAsync(model, lookupTitle, lookupYear, selectedImdbId, cancellationToken);
+            addModel.LookupMessage = "Please check the required fields.";
             return View("Add", addModel);
         }
 
-        if (model.UserRating.HasValue)
-        {
-            model.UserGrade ??= RecommendationViewHelper.MapScoreToGrade(model.UserRating);
-            model.PrimaryVerdict = RecommendationViewHelper.MapGradeToVerdict(model.UserGrade) ?? RecommendationCatalog.MapLegacyVerdict(model.ToEntity());
-            model.WatchedStatus = WatchedStatus.Watched;
-        }
+        ApplyAddReviewState(model, addVerdict, addReasonTags, queueForReview);
 
         var entity = model.ToEntity();
         var normalizedTitle = TitleNormalizer.Normalize(entity.Title);
@@ -573,16 +643,18 @@ public class MoviesController : Controller
             .ThenByDescending(x => x.Id)
             .FirstOrDefaultAsync(cancellationToken);
 
-        TempData["StatusMessage"] = savedMovie is not null && savedMovie.CreatedUtc == savedMovie.UpdatedUtc
-            ? "Movie added to the local database."
-            : "Movie saved.";
-
         if (savedMovie is null)
         {
             return RedirectToAction(nameof(Index));
         }
 
-        return RedirectToAction(nameof(Details), new { id = savedMovie.Id });
+        TempData["StatusMessage"] = "Movie was added to the library.";
+        if (queueForReview)
+        {
+            return RedirectToAction(nameof(Index), new { section = "review" });
+        }
+
+        return RedirectToAction(nameof(Index), new { section = model.WatchedStatus == WatchedStatus.Watched ? "watched" : "not-watched" });
     }
 
     [HttpGet]
@@ -612,12 +684,7 @@ public class MoviesController : Controller
             return NotFound();
         }
 
-        if (model.UserRating.HasValue)
-        {
-            model.UserGrade ??= RecommendationViewHelper.MapScoreToGrade(model.UserRating);
-            model.PrimaryVerdict = RecommendationViewHelper.MapGradeToVerdict(model.UserGrade) ?? RecommendationCatalog.MapLegacyVerdict(model.ToEntity());
-            model.WatchedStatus = WatchedStatus.Watched;
-        }
+        NormalizeManualReviewFields(model);
 
         await _movieUpsertService.UpdateManualAsync(existing, model.ToEntity(), cancellationToken);
         await _personalMatchService.RecalculateAsync(cancellationToken);
@@ -650,7 +717,7 @@ public class MoviesController : Controller
         }
 
         TempData["StatusMessage"] = "Movie deleted.";
-        return RedirectToLocalOr(returnUrl, nameof(Index));
+        return RedirectToDeleteReturnUrl(returnUrl);
     }
 
     [HttpPost]
@@ -680,6 +747,7 @@ public class MoviesController : Controller
             movie.ReasonTagsCsv = null;
             movie.NormalizedTagsCsv = null;
             movie.NeedsTagReview = false;
+            movie.IsWowPick = false;
         }
         else
         {
@@ -721,37 +789,46 @@ public class MoviesController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SetRating(int id, int? userRating, string? returnUrl, CancellationToken cancellationToken)
+    public async Task<IActionResult> ToggleWow(int id, string? returnUrl, CancellationToken cancellationToken)
     {
         var movie = await _dbContext.Movies.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (movie is null)
         {
-            return AjaxOrRedirect(false, null, null, null, null, returnUrl);
+            return WowAjaxOrRedirect(false, "Movie not found.", false, 0, 0, returnUrl);
         }
 
-        movie.UserRating = userRating is >= 1 and <= 10 ? userRating.Value : null;
-        movie.UserGrade = RecommendationViewHelper.MapScoreToGrade(movie.UserRating);
-        movie.PrimaryVerdict = RecommendationViewHelper.MapGradeToVerdict(movie.UserGrade);
-        if (movie.UserRating.HasValue && movie.WatchedStatus != WatchedStatus.Watched)
+        var preferences = _preferencesService.Get();
+        var totalMovieCount = await _dbContext.Movies.CountAsync(cancellationToken);
+        var wowLimit = WowPickHelper.GetWowLimit(totalMovieCount, preferences);
+        var wowCount = await _dbContext.Movies.CountAsync(x => x.IsWowPick, cancellationToken);
+
+        if (!movie.IsWowPick && !WowPickHelper.CanAssignWow(movie))
         {
-            movie.WatchedStatus = WatchedStatus.Watched;
+            return WowAjaxOrRedirect(false, "Wow is only available for watched movies with a completed review.", movie.IsWowPick, wowCount, wowLimit, returnUrl);
         }
 
+        if (!movie.IsWowPick && wowCount >= wowLimit)
+        {
+            return WowAjaxOrRedirect(false, $"Wow limit reached ({wowCount}/{wowLimit}). Remove one wow pick before adding another.", movie.IsWowPick, wowCount, wowLimit, returnUrl);
+        }
+
+        movie.IsWowPick = !movie.IsWowPick;
         await _dbContext.SaveChangesAsync(cancellationToken);
         await _personalMatchService.RecalculateAsync(cancellationToken);
         await _dbContext.Entry(movie).ReloadAsync(cancellationToken);
 
-        return AjaxOrRedirect(
-            true,
-            movie.WatchedStatus == WatchedStatus.Watched,
-            movie.UserRating,
-            movie.PrimaryVerdict,
-            RecommendationViewHelper.SplitCsv(movie.ReasonTagsCsv).ToArray(),
-            returnUrl,
-            movie.PersonalMatchScore,
-            movie.PredictedScore,
-            movie.PredictedLabel,
-            movie.PredictedReason);
+        wowCount = await _dbContext.Movies.CountAsync(x => x.IsWowPick, cancellationToken);
+
+        await _appEventLogService.WriteMovieEventAsync(
+            "Movie.ToggleWow",
+            "Success",
+            $"{(movie.IsWowPick ? "Marked" : "Removed")} wow pick for '{movie.Title}'.",
+            movie,
+            Request.Path.ToString(),
+            new { movie.IsWowPick, WowCount = wowCount, WowLimit = wowLimit },
+            cancellationToken);
+
+        return WowAjaxOrRedirect(true, movie.IsWowPick ? "Wow pick saved." : "Wow pick removed.", movie.IsWowPick, wowCount, wowLimit, returnUrl);
     }
 
     [HttpPost]
@@ -1010,12 +1087,25 @@ public class MoviesController : Controller
 
     private IActionResult RedirectToLocalOr(string? returnUrl, string fallbackAction)
     {
-        if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+        if (!string.IsNullOrWhiteSpace(returnUrl) && Url is not null && Url.IsLocalUrl(returnUrl))
         {
             return Redirect(returnUrl);
         }
 
         return RedirectToAction(fallbackAction);
+    }
+
+    private IActionResult RedirectToDeleteReturnUrl(string? returnUrl)
+    {
+        if (!string.IsNullOrWhiteSpace(returnUrl)
+            && Url is not null
+            && Url.IsLocalUrl(returnUrl)
+            && !IsMovieDetailsUrl(returnUrl))
+        {
+            return Redirect(returnUrl);
+        }
+
+        return RedirectToAction(nameof(Index));
     }
 
     private IActionResult AjaxOrRedirect(
@@ -1050,12 +1140,169 @@ public class MoviesController : Controller
         return RedirectToLocalOr(returnUrl, nameof(Index));
     }
 
+    private IActionResult WowAjaxOrRedirect(bool success, string message, bool isWowPick, int wowCount, int wowLimit, string? returnUrl)
+    {
+        if (IsAjaxRequest())
+        {
+            return Json(new
+            {
+                success,
+                message,
+                isWowPick,
+                wowCount,
+                wowLimit
+            });
+        }
+
+        TempData["StatusMessage"] = message;
+        return RedirectToLocalOr(returnUrl, nameof(Index));
+    }
+
     private bool IsAjaxRequest()
         => string.Equals(Request.Headers["X-Requested-With"], "XMLHttpRequest", StringComparison.OrdinalIgnoreCase);
 
     private static bool ShouldRedirectToDetails(string? returnUrl)
         => !string.IsNullOrWhiteSpace(returnUrl)
            && returnUrl.Contains("section=review", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsMovieDetailsUrl(string returnUrl)
+        => returnUrl.Contains("/Movies/Details", StringComparison.OrdinalIgnoreCase)
+           || returnUrl.Contains("/Movies/Details/", StringComparison.OrdinalIgnoreCase)
+           || returnUrl.Contains("action=Details", StringComparison.OrdinalIgnoreCase);
+
+    private static void NormalizeManualReviewFields(MovieEditViewModel model, bool preserveWatchedSelectionForReview = false)
+    {
+        if (model.WatchedStatus == WatchedStatus.Watched)
+        {
+            if (model.PrimaryVerdict.HasValue)
+            {
+                model.UserGrade = RecommendationViewHelper.MapVerdictToGrade(model.PrimaryVerdict.Value);
+                model.UserRating = RecommendationViewHelper.MapVerdictToUserRating(model.PrimaryVerdict.Value);
+                return;
+            }
+
+            if (model.UserGrade.HasValue)
+            {
+                model.PrimaryVerdict = RecommendationViewHelper.MapGradeToVerdict(model.UserGrade);
+                model.UserRating = RecommendationViewHelper.MapGradeToUserRating(model.UserGrade.Value);
+                return;
+            }
+
+            if (preserveWatchedSelectionForReview)
+            {
+                model.WatchedStatus = WatchedStatus.NotWatched;
+                model.NeedsTagReview = false;
+                model.UserRating = null;
+                model.UserGrade = null;
+                model.PrimaryVerdict = null;
+                model.ReasonTagsCsv = null;
+                model.SelectedReasonTags = [];
+                return;
+            }
+
+            model.NeedsTagReview = true;
+            model.UserRating = null;
+            return;
+        }
+
+        model.UserRating = null;
+        model.UserGrade = null;
+        model.PrimaryVerdict = null;
+        model.ReasonTagsCsv = null;
+        model.SelectedReasonTags = [];
+        model.NeedsTagReview = false;
+    }
+
+    private async Task<AddMoviePageViewModel> BuildAddPageModelAsync(MovieEditViewModel model, string? lookupTitle, int? lookupYear, string? selectedImdbId, CancellationToken cancellationToken)
+    {
+        return new AddMoviePageViewModel
+        {
+            LookupTitle = lookupTitle ?? model.Title,
+            LookupYear = lookupYear ?? model.Year,
+            ShowSavePopup = true,
+            Movie = model,
+            SelectedImdbId = selectedImdbId,
+            Candidates = (await _metadataService.SearchCandidatesAsync(lookupTitle ?? model.Title, lookupYear ?? model.Year, 10, cancellationToken)).ToList()
+        };
+    }
+
+    private void ApplyAddReviewState(MovieEditViewModel model, PersonalVerdict? addVerdict, List<string>? addReasonTags, bool queueForReview)
+    {
+        if (model.WatchedStatus != WatchedStatus.Watched)
+        {
+            NormalizeManualReviewFields(model);
+            return;
+        }
+
+        if (addVerdict.HasValue)
+        {
+            model.PrimaryVerdict = addVerdict.Value;
+            model.UserGrade = RecommendationViewHelper.MapVerdictToGrade(addVerdict.Value);
+            model.UserRating = RecommendationViewHelper.MapVerdictToUserRating(addVerdict.Value);
+            model.SelectedReasonTags = (addReasonTags ?? [])
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Take(RecommendationViewHelper.MaxReasonTags)
+                .ToList();
+            model.ReasonTagsCsv = RecommendationViewHelper.JoinCsv(model.SelectedReasonTags);
+            model.NeedsTagReview = model.SelectedReasonTags.Count < RecommendationViewHelper.GetMinimumReasonTags(model.UserGrade);
+            return;
+        }
+
+        if (queueForReview)
+        {
+            model.UserRating = null;
+            model.UserGrade = null;
+            model.PrimaryVerdict = null;
+            model.ReasonTagsCsv = null;
+            model.SelectedReasonTags = [];
+            model.NeedsTagReview = true;
+            return;
+        }
+
+        NormalizeManualReviewFields(model);
+    }
+
+    private async Task<MovieDetailsViewModel?> BuildEstimatePreviewAsync(MovieEditViewModel model, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(model.Title))
+        {
+            return null;
+        }
+
+        var movie = model.ToEntity();
+        movie.Id = -1;
+        movie.NormalizedTitle = TitleNormalizer.Normalize(movie.Title);
+        movie.WatchedStatus = WatchedStatus.NotWatched;
+        movie.UserRating = null;
+        movie.UserGrade = null;
+        movie.PrimaryVerdict = null;
+        movie.ReasonTagsCsv = null;
+        movie.NormalizedTagsCsv = null;
+        movie.NeedsTagReview = false;
+        movie.IsDismissed = false;
+
+        var movies = await _dbContext.Movies.AsNoTracking().ToListAsync(cancellationToken);
+        movies.Add(movie);
+
+        var preferences = _preferencesService.Get();
+        var results = _recommendationEngine.CalculateResults(movies, preferences);
+        if (!results.TryGetValue(movie.Id, out var result))
+        {
+            return null;
+        }
+
+        movie.PersonalMatchScore = result.PersonalMatchScore;
+        movie.PredictedScore = result.FinalScore;
+        movie.PredictedLabel = result.PredictedLabel;
+        movie.PredictedReason = result.PredictedReason;
+        movie.RecommendationContextJson = JsonSerializer.Serialize(result.Context);
+        movie.PlotKeywordsCsv = RecommendationCatalog.JoinCsv(result.Context.PlotKeywords);
+
+        var referenceMovie = await ResolveReferenceMovieAsync(movie, cancellationToken);
+        var wowCount = await _dbContext.Movies.CountAsync(x => x.IsWowPick, cancellationToken);
+        var wowLimit = WowPickHelper.GetWowLimit(await _dbContext.Movies.CountAsync(cancellationToken), preferences);
+        return MovieDetailsViewModel.Create(movie, preferences.DismissScoreThreshold, wowCount, wowLimit, referenceMovie);
+    }
 
     private static MovieEditViewModel MapLookupResult(MetadataLookupResult result)
     {

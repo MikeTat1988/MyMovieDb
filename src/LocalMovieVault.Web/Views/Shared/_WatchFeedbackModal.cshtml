@@ -69,6 +69,12 @@
             <input type="hidden" name="id" id="toggleWatchedMovieId" />
             <input type="hidden" name="returnUrl" id="toggleWatchedReturnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
         </form>
+
+        <form asp-controller="Movies" asp-action="ToggleWow" method="post" id="toggleWowForm" hidden>
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="id" id="toggleWowMovieId" />
+            <input type="hidden" name="returnUrl" id="toggleWowReturnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+        </form>
     </div>
 </div>
 
@@ -86,7 +92,7 @@
         <form asp-controller="Movies" asp-action="Dismiss" method="post" id="dismissMovieForm" class="stack-form">
             @Html.AntiForgeryToken()
             <input type="hidden" name="id" id="dismissMovieId" />
-            <input type="hidden" name="returnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+            <input type="hidden" name="returnUrl" id="dismissMovieReturnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
             <div>
                 <label>Why dismiss it?</label>
                 <div class="tag-picker-grid" data-max-tags="@RecommendationViewHelper.MaxReasonTags">
@@ -100,6 +106,12 @@
                 </div>
             </div>
             <button class="button danger" type="submit">Confirm dismissal</button>
+        </form>
+
+        <form asp-controller="Movies" asp-action="Restore" method="post" id="restoreMovieForm" hidden>
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="id" id="restoreMovieId" />
+            <input type="hidden" name="returnUrl" id="restoreMovieReturnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
         </form>
     </div>
 </div>

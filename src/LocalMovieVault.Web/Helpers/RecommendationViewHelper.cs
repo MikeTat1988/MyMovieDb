@@ -34,6 +34,7 @@ public static class RecommendationViewHelper
         new("weak_twist", "Weak twist", "Story", false),
         new("strong_ending", "Strong ending", "Story", true),
         new("weak_ending", "Weak ending", "Story", false),
+        new("weak_story", "Weak story", "Story", false),
         new("great_acting", "Great acting", "Craft", true),
         new("weak_acting", "Weak acting", "Craft", false),
         new("great_dialogue", "Great dialogue", "Craft", true),
@@ -44,6 +45,7 @@ public static class RecommendationViewHelper
         new("breaks_immersion", "Breaks immersion", "Experience", false),
         new("good_pacing", "Good pacing", "Experience", true),
         new("too_slow", "Too slow", "Experience", false),
+        new("boring", "Boring", "Experience", false),
         new("scary", "Scary", "Genre vibe", true, ["Horror", "Thriller"]),
         new("not_scary", "Not scary", "Genre vibe", false, ["Horror", "Thriller"]),
         new("tense", "Tense", "Genre vibe", true, ["Horror", "Thriller", "Mystery", "Crime"]),
@@ -305,6 +307,8 @@ public static class RecommendationViewHelper
             "Tense" => 1.25m,
             "Scary" => 1.2m,
             "Breaks immersion" => 1.15m,
+            "Weak story" => 1.2m,
+            "Boring" => 1.15m,
             _ => 1.0m
         };
     }

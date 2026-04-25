@@ -22,7 +22,7 @@
     <main class="container page">
         @if (TempData["StatusMessage"] is string statusMessage && !string.IsNullOrWhiteSpace(statusMessage))
         {
-            <div class="alert success">@statusMessage</div>
+            <div class="app-toast success js-auto-dismiss-status" role="status" aria-live="polite">@statusMessage</div>
         }
 
         @RenderBody()

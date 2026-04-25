@@ -6,6 +6,7 @@ obj/
 # IDE and local tooling
 .vs/
 .vscode/
+.codex/
 *.user
 *.suo
 
@@ -13,6 +14,8 @@ obj/
 logs/
 *.tmp
 *.temp
+llm-lab/reports/
+docs/superpowers/specs/*-preview.html
 
 # Test and review scratch outputs
 build/screenshot-review/

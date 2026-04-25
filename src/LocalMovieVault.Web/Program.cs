@@ -50,7 +50,8 @@ if (!string.IsNullOrWhiteSpace(dbDirectory))
 
 builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite(connectionString));
 builder.Services.AddSingleton<TitleOverrideService>();
-builder.Services.AddHttpClient<IMovieMetadataService, OmdbMovieMetadataService>();
+builder.Services.AddHttpClient<OmdbMovieMetadataService>();
+builder.Services.AddScoped<IMovieMetadataService, RankedMovieMetadataService>();
 builder.Services.AddScoped<MovieUpsertService>();
 builder.Services.AddScoped<SeedDataService>();
 builder.Services.AddScoped<PersonalMatchService>();

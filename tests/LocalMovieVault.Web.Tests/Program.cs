@@ -38,7 +38,26 @@ if (args.Length >= 1 && string.Equals(args[0], "--find-duplicates", StringCompar
     return;
 }
 
+if (args.Length >= 2 && string.Equals(args[0], "--preview-score", StringComparison.OrdinalIgnoreCase))
+{
+    await PreviewScoresAsync(args.Skip(1));
+    return;
+}
+
+if (args.Length >= 1 && string.Equals(args[0], "--analyze-rating-gaps", StringComparison.OrdinalIgnoreCase))
+{
+    await AnalyzeRatingGapsAsync();
+    return;
+}
+
+if (args.Length >= 1 && string.Equals(args[0], "--sweep-weight-profiles", StringComparison.OrdinalIgnoreCase))
+{
+    await SweepWeightProfilesAsync();
+    return;
+}
+
 RunSmokeStep("AssertCanonicalTagAlias", () => AssertCanonicalTagAlias("Beautiful visuals", "Incredible visuals"));
+RunSmokeStep("AssertCanonicalTagAliasForNewNegativeTags", () => AssertCanonicalTagAlias("Weak story", "Weak story"));
 RunSmokeStep("AssertLegacyMigrationDropsAmbiguousTags", AssertLegacyMigrationDropsAmbiguousTags);
 RunSmokeStep("AssertGradeMapping", AssertGradeMapping);
 RunSmokeStep("AssertDisplayMatchScorePrefersPredictedForUnwatched", AssertDisplayMatchScorePrefersPredictedForUnwatched);
@@ -48,23 +67,35 @@ RunSmokeStep("AssertUnwatchedReviewQueueFlagTriggersReviewState", AssertUnwatche
 RunSmokeStep("AssertGenreAwareTagGrouping", AssertGenreAwareTagGrouping);
 RunSmokeStep("AssertBestMatchUsesGenreDropdown", AssertBestMatchUsesGenreDropdown);
 RunSmokeStep("AssertDiscoveryCardUsesStatusToggleLayout", AssertDiscoveryCardUsesStatusToggleLayout);
+RunSmokeStep("AssertDiscoveryCardIncludesDismissToggleStates", AssertDiscoveryCardIncludesDismissToggleStates);
 RunSmokeStep("AssertDiscoveryCardShowsIndependentMetricLabels", AssertDiscoveryCardShowsIndependentMetricLabels);
 RunSmokeStep("AssertDiscoveryCardShowsUserMetricOnlyAfterCompletedReview", AssertDiscoveryCardShowsUserMetricOnlyAfterCompletedReview);
 RunSmokeStep("AssertMovieDetailsViewUsesUpdatedDetailsLayout", AssertMovieDetailsViewUsesUpdatedDetailsLayout);
 RunSmokeStep("AssertMovieDetailsViewUsesBottomEditAndDeleteActions", AssertMovieDetailsViewUsesBottomEditAndDeleteActions);
+RunSmokeStep("AssertMovieDetailsViewShowsDismissStatus", AssertMovieDetailsViewShowsDismissStatus);
+RunSmokeStep("AssertMovieDetailsViewShowsWowControls", AssertMovieDetailsViewShowsWowControls);
 RunSmokeStep("AssertMovieDetailsViewModelUsesHeroSlotRules", AssertMovieDetailsViewModelUsesHeroSlotRules);
+RunSmokeStep("AssertPlotKeywordExtractorDropsJunkTokens", AssertPlotKeywordExtractorDropsJunkTokens);
+RunSmokeStep("AssertTheRoomFixtureExtractsReviewDerivedSignals", AssertTheRoomFixtureExtractsReviewDerivedSignals);
 await RunSmokeStepAsync("AssertMovieDetailsDetailsActionLoadsReferenceMovieAsync", AssertMovieDetailsDetailsActionLoadsReferenceMovieAsync);
+await RunSmokeStepAsync("AssertMovieDetailsDetailsActionSuppressesWeakGenreOnlyReferenceAsync", AssertMovieDetailsDetailsActionSuppressesWeakGenreOnlyReferenceAsync);
 RunSmokeStep("AssertWatchModalSupportsReviewLater", AssertWatchModalSupportsReviewLater);
 RunSmokeStep("AssertGenreNormalizerSupportsPipeSeparatedGenres", AssertGenreNormalizerSupportsPipeSeparatedGenres);
 RunSmokeStep("AssertDiscoveryCardDoesNotShowPredictionNarrative", AssertDiscoveryCardDoesNotShowPredictionNarrative);
 RunSmokeStep("AssertToggleUnwatchedFallsBackToFormPost", AssertToggleUnwatchedFallsBackToFormPost);
 RunSmokeStep("AssertToggleUnwatchedUsesDedicatedToggleForm", AssertToggleUnwatchedUsesDedicatedToggleForm);
+RunSmokeStep("AssertLibraryViewIncludesWowSection", AssertLibraryViewIncludesWowSection);
+RunSmokeStep("AssertWatchModalIncludesToggleWowForm", AssertWatchModalIncludesToggleWowForm);
 RunSmokeStep("AssertImportantTagsMigrateToCanonicalArray", AssertImportantTagsMigrateToCanonicalArray);
 await RunSmokeStepAsync("AssertCsvDeltaParserAsync", AssertCsvDeltaParserAsync);
 await RunSmokeStepAsync("AssertRecommendationUsesNormalizedTagsAsync", AssertRecommendationUsesNormalizedTagsAsync);
+await RunSmokeStepAsync("AssertNewNegativeTagsPenalizeCandidateAsync", AssertNewNegativeTagsPenalizeCandidateAsync);
 await RunSmokeStepAsync("AssertSingleWatchedMovieDoesNotSelfBoostAsync", AssertSingleWatchedMovieDoesNotSelfBoostAsync);
 await RunSmokeStepAsync("AssertMehRatingDoesNotPenalizeMatchingCandidateAsync", AssertMehRatingDoesNotPenalizeMatchingCandidateAsync);
 await RunSmokeStepAsync("AssertStrongCandidateCanScoreHighWithoutPerfectTagOverlapAsync", AssertStrongCandidateCanScoreHighWithoutPerfectTagOverlapAsync);
+await RunSmokeStepAsync("AssertComedyHybridScoresBelowSeriousSciFiAgainstSeriousAnchorAsync", AssertComedyHybridScoresBelowSeriousSciFiAgainstSeriousAnchorAsync);
+await RunSmokeStepAsync("AssertQuietDreadScoresBelowIntenseHorrorAgainstIntenseAnchorAsync", AssertQuietDreadScoresBelowIntenseHorrorAgainstIntenseAnchorAsync);
+await RunSmokeStepAsync("AssertBroadInferredMatchDoesNotClaimStrongEvidenceAsync", AssertBroadInferredMatchDoesNotClaimStrongEvidenceAsync);
 await RunSmokeStepAsync("AssertLowScoreExplanationDoesNotSoundPositiveAsync", AssertLowScoreExplanationDoesNotSoundPositiveAsync);
 await RunSmokeStepAsync("AssertNeedsTagReviewMovieDoesNotTrainRecommendationsAsync", AssertNeedsTagReviewMovieDoesNotTrainRecommendationsAsync);
 await RunSmokeStepAsync("AssertScoreCalibrationDoesNotOveruseTopBandAsync", AssertScoreCalibrationDoesNotOveruseTopBandAsync);
@@ -74,12 +105,18 @@ await RunSmokeStepAsync("AssertSettingsPreviewFallsBackWhenPinnedMovieDoesNotCha
 await RunSmokeStepAsync("AssertSettingsSavePersistsImportantTagsAndRecalculatesAsync", AssertSettingsSavePersistsImportantTagsAndRecalculatesAsync);
 await RunSmokeStepAsync("AssertSettingsSaveUsesSelectionsWhenPreferencesAreNotPostedAsync", AssertSettingsSaveUsesSelectionsWhenPreferencesAreNotPostedAsync);
 await RunSmokeStepAsync("AssertToggleWatchedClearsLegacyScoreAsync", AssertToggleWatchedClearsLegacyScoreAsync);
+await RunSmokeStepAsync("AssertToggleWowRequiresCompletedReviewAsync", AssertToggleWowRequiresCompletedReviewAsync);
+await RunSmokeStepAsync("AssertToggleWowHonorsLimitAsync", AssertToggleWowHonorsLimitAsync);
+await RunSmokeStepAsync("AssertWowPickBoostsMatchingCandidateAsync", AssertWowPickBoostsMatchingCandidateAsync);
 await RunSmokeStepAsync("AssertCompleteWatchRequiresThreeTagsAsync", AssertCompleteWatchRequiresThreeTagsAsync);
 await RunSmokeStepAsync("AssertCompleteWatchWritesAppEventAsync", AssertCompleteWatchWritesAppEventAsync);
 await RunSmokeStepAsync("AssertCompleteWatchShowsImmediateMismatchSuggestionAsync", AssertCompleteWatchShowsImmediateMismatchSuggestionAsync);
 await RunSmokeStepAsync("AssertCompleteWatchAccumulatesMismatchMarksAsync", AssertCompleteWatchAccumulatesMismatchMarksAsync);
 await RunSmokeStepAsync("AssertDismissedMismatchSuggestionAppliesCooldownAsync", AssertDismissedMismatchSuggestionAppliesCooldownAsync);
 await RunSmokeStepAsync("AssertAcceptingMismatchSuggestionPersistsPreferenceAsync", AssertAcceptingMismatchSuggestionPersistsPreferenceAsync);
+await RunSmokeStepAsync("AssertLibrarySearchQueriesAcrossSectionsAsync", AssertLibrarySearchQueriesAcrossSectionsAsync);
+await RunSmokeStepAsync("AssertCreateWatchedWithReviewRedirectsToLibraryAsync", AssertCreateWatchedWithReviewRedirectsToLibraryAsync);
+await RunSmokeStepAsync("AssertDeleteFromDetailsRedirectsToLibraryAsync", AssertDeleteFromDetailsRedirectsToLibraryAsync);
 await RunSmokeStepAsync("AssertDismissAndRestoreWriteAppEventsAsync", AssertDismissAndRestoreWriteAppEventsAsync);
 await RunSmokeStepAsync("AssertImportUploadWritesAppEventAsync", AssertImportUploadWritesAppEventAsync);
 await RunSmokeStepAsync("AssertRestoreFromExportCsvAsync", AssertRestoreFromExportCsvAsync);
@@ -88,6 +125,9 @@ RunSmokeStep("AssertSettingsViewDoesNotExposeDeferredSliders", AssertSettingsVie
 RunSmokeStep("AssertSettingsViewIncludesRandomizeButtonHook", AssertSettingsViewIncludesRandomizeButtonHook);
 RunSmokeStep("AssertSettingsViewIncludesDiagnosticsLink", AssertSettingsViewIncludesDiagnosticsLink);
 RunSmokeStep("AssertAddLookupFormIncludesAntiForgeryToken", AssertAddLookupFormIncludesAntiForgeryToken);
+RunSmokeStep("AssertAddViewRemovesManualScorePicker", AssertAddViewRemovesManualScorePicker);
+RunSmokeStep("AssertStandaloneEditFormRemovesManualScorePicker", AssertStandaloneEditFormRemovesManualScorePicker);
+RunSmokeStep("AssertMoviesControllerRemovesLegacySetRatingAction", AssertMoviesControllerRemovesLegacySetRatingAction);
 RunSmokeStep("AssertSizeLimitedFileLogRollsOver", AssertSizeLimitedFileLogRollsOver);
 
 Console.WriteLine("All LocalMovieVault.Web smoke tests passed.");
@@ -210,6 +250,323 @@ static async Task PrintDatabaseCountAsync()
     {
         Console.WriteLine($"{item.Id}: {item.Title} | {item.Year} | {item.UserGrade} | {item.WatchedStatus}");
     }
+}
+
+static async Task PreviewScoresAsync(IEnumerable<string> titles)
+{
+    var requestedTitles = titles
+        .Select(x => x.Trim())
+        .Where(x => !string.IsNullOrWhiteSpace(x))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    if (requestedTitles.Count == 0)
+    {
+        throw new ArgumentException("Provide at least one title after --preview-score.");
+    }
+
+    var projectRoot = FindProjectRoot();
+    var contentRoot = Path.Combine(projectRoot, "src", "LocalMovieVault.Web");
+    var appSettingsPath = Path.Combine(contentRoot, "appsettings.json");
+    var bootstrapConfiguration = new ConfigurationBuilder()
+        .AddJsonFile(appSettingsPath, optional: false)
+        .Build();
+
+    var storage = AppStorageBootstrapper.Initialize(contentRoot, bootstrapConfiguration);
+    var configuration = new ConfigurationBuilder()
+        .AddJsonFile(appSettingsPath, optional: false)
+        .AddJsonFile(storage.SettingsPath, optional: true)
+        .Build();
+
+    var options = new DbContextOptionsBuilder<AppDbContext>()
+        .UseSqlite($"Data Source={storage.DatabasePath}")
+        .Options;
+
+    await using var dbContext = new AppDbContext(options);
+    var migrator = new DatabaseSchemaMigrator();
+    await migrator.MigrateAsync(dbContext);
+
+    var preferencesService = new AppUserPreferencesService(storage);
+    var engine = new DeterministicRecommendationEngine(
+        dbContext,
+        new RecommendationFeatureExtractor(new PlotKeywordExtractor()),
+        new RecommendationExplainer(),
+        preferencesService);
+    var metadataService = new RankedMovieMetadataService(
+        new OmdbMovieMetadataService(
+            new HttpClient(),
+            configuration,
+            new TitleOverrideService(storage)));
+
+    foreach (var requestedTitle in requestedTitles)
+    {
+        var lookup = await metadataService.LookupByTitleAsync(requestedTitle, null);
+        if (!lookup.Success)
+        {
+            Console.WriteLine($"TITLE: {requestedTitle}");
+            Console.WriteLine($"ERROR: {lookup.ErrorMessage ?? "Metadata lookup failed."}");
+            Console.WriteLine();
+            continue;
+        }
+
+        var movies = await dbContext.Movies.AsNoTracking().ToListAsync();
+        var previewMovie = MapLookupResultToPreviewMovie(lookup, -1 - requestedTitles.IndexOf(requestedTitle));
+        movies.Add(previewMovie);
+
+        var results = engine.CalculateResults(movies, preferencesService.Get());
+        var result = results[previewMovie.Id];
+        var topAnchor = result.Context.SimilarToLiked
+            .OrderByDescending(x => x.SimilarityScore)
+            .FirstOrDefault();
+
+        Console.WriteLine($"TITLE: {lookup.Title}");
+        Console.WriteLine($"YEAR: {lookup.Year}");
+        Console.WriteLine($"GENRES: {lookup.GenresCsv}");
+        Console.WriteLine($"PREDICTED_SCORE: {result.FinalScore:0.0}");
+        Console.WriteLine($"PREDICTED_LABEL: {result.PredictedLabel}");
+        Console.WriteLine($"REASON: {result.PredictedReason}");
+        Console.WriteLine($"TOP_ANCHOR: {(topAnchor is null ? "-" : $"{topAnchor.Title} ({topAnchor.SimilarityScore:0.0})")}");
+        Console.WriteLine();
+    }
+}
+
+static async Task AnalyzeRatingGapsAsync()
+{
+    var projectRoot = FindProjectRoot();
+    var contentRoot = Path.Combine(projectRoot, "src", "LocalMovieVault.Web");
+    var appSettingsPath = Path.Combine(contentRoot, "appsettings.json");
+    var bootstrapConfiguration = new ConfigurationBuilder()
+        .AddJsonFile(appSettingsPath, optional: false)
+        .Build();
+
+    var storage = AppStorageBootstrapper.Initialize(contentRoot, bootstrapConfiguration);
+    var configuration = new ConfigurationBuilder()
+        .AddJsonFile(appSettingsPath, optional: false)
+        .AddJsonFile(storage.SettingsPath, optional: true)
+        .Build();
+
+    var options = new DbContextOptionsBuilder<AppDbContext>()
+        .UseSqlite($"Data Source={storage.DatabasePath}")
+        .Options;
+
+    await using var dbContext = new AppDbContext(options);
+    var migrator = new DatabaseSchemaMigrator();
+    await migrator.MigrateAsync(dbContext);
+
+    var preferencesService = new AppUserPreferencesService(storage);
+    var engine = new DeterministicRecommendationEngine(
+        dbContext,
+        new RecommendationFeatureExtractor(new PlotKeywordExtractor()),
+        new RecommendationExplainer(),
+        preferencesService);
+
+    var movies = await dbContext.Movies.AsNoTracking().ToListAsync();
+    var results = engine.CalculateResults(movies, preferencesService.Get());
+
+    var comparable = movies
+        .Where(x => x.WatchedStatus == WatchedStatus.Watched && x.UserRating.HasValue)
+        .Select(movie =>
+        {
+            var currentScore = results[movie.Id].FinalScore;
+            var oldScore = movie.PredictedScore;
+            var userRating = movie.UserRating!.Value;
+            var oldGap = oldScore.HasValue ? Math.Abs(oldScore.Value - userRating) : (decimal?)null;
+            var newGap = Math.Abs(currentScore - userRating);
+            var improvement = oldGap.HasValue ? oldGap.Value - newGap : (decimal?)null;
+
+            return new
+            {
+                movie.Title,
+                UserRating = userRating,
+                OldScore = oldScore,
+                NewScore = currentScore,
+                OldGap = oldGap,
+                NewGap = newGap,
+                Improvement = improvement
+            };
+        })
+        .ToList();
+
+    Console.WriteLine($"DATABASE: {storage.DatabasePath}");
+    Console.WriteLine($"WATCHED_WITH_RATING: {comparable.Count}");
+    Console.WriteLine($"AVERAGE_ABS_GAP_BEFORE: {(comparable.Where(x => x.OldGap.HasValue).Select(x => x.OldGap!.Value).DefaultIfEmpty(0m).Average()):0.0}");
+    Console.WriteLine($"AVERAGE_ABS_GAP_NOW: {comparable.Select(x => x.NewGap).DefaultIfEmpty(0m).Average():0.0}");
+    Console.WriteLine($"IMPROVED_COUNT: {comparable.Count(x => x.Improvement > 0.5m)}");
+    Console.WriteLine($"WORSE_COUNT: {comparable.Count(x => x.Improvement < -0.5m)}");
+    Console.WriteLine($"UNCHANGEDISH_COUNT: {comparable.Count(x => x.Improvement is null or >= -0.5m and <= 0.5m)}");
+    Console.WriteLine();
+
+    Console.WriteLine("MOST_IMPROVED:");
+    foreach (var item in comparable
+        .Where(x => x.Improvement.HasValue)
+        .OrderByDescending(x => x.Improvement)
+        .ThenBy(x => x.NewGap)
+        .Take(12))
+    {
+        Console.WriteLine($"{item.Title} | user={item.UserRating:0.0} | old={item.OldScore:0.0} | new={item.NewScore:0.0} | oldGap={item.OldGap:0.0} | newGap={item.NewGap:0.0} | delta={item.Improvement:+0.0;-0.0;0.0}");
+    }
+
+    Console.WriteLine();
+    Console.WriteLine("MOST_WORSE:");
+    foreach (var item in comparable
+        .Where(x => x.Improvement.HasValue)
+        .OrderBy(x => x.Improvement)
+        .ThenByDescending(x => x.NewGap)
+        .Take(12))
+    {
+        Console.WriteLine($"{item.Title} | user={item.UserRating:0.0} | old={item.OldScore:0.0} | new={item.NewScore:0.0} | oldGap={item.OldGap:0.0} | newGap={item.NewGap:0.0} | delta={item.Improvement:+0.0;-0.0;0.0}");
+    }
+
+    Console.WriteLine();
+    Console.WriteLine("BIGGEST_CURRENT_GAPS:");
+    foreach (var item in comparable
+        .OrderByDescending(x => x.NewGap)
+        .ThenBy(x => x.Title, StringComparer.OrdinalIgnoreCase)
+        .Take(20))
+    {
+        Console.WriteLine($"{item.Title} | user={item.UserRating:0.0} | old={item.OldScore:0.0} | new={item.NewScore:0.0} | oldGap={(item.OldGap.HasValue ? item.OldGap.Value.ToString("0.0") : "-")} | newGap={item.NewGap:0.0} | delta={(item.Improvement.HasValue ? item.Improvement.Value.ToString("+0.0;-0.0;0.0") : "-")}");
+    }
+}
+
+static async Task SweepWeightProfilesAsync()
+{
+    var projectRoot = FindProjectRoot();
+    var contentRoot = Path.Combine(projectRoot, "src", "LocalMovieVault.Web");
+    var appSettingsPath = Path.Combine(contentRoot, "appsettings.json");
+    var bootstrapConfiguration = new ConfigurationBuilder()
+        .AddJsonFile(appSettingsPath, optional: false)
+        .Build();
+
+    var storage = AppStorageBootstrapper.Initialize(contentRoot, bootstrapConfiguration);
+    var configuration = new ConfigurationBuilder()
+        .AddJsonFile(appSettingsPath, optional: false)
+        .AddJsonFile(storage.SettingsPath, optional: true)
+        .Build();
+
+    var options = new DbContextOptionsBuilder<AppDbContext>()
+        .UseSqlite($"Data Source={storage.DatabasePath}")
+        .Options;
+
+    await using var dbContext = new AppDbContext(options);
+    var migrator = new DatabaseSchemaMigrator();
+    await migrator.MigrateAsync(dbContext);
+
+    var preferencesService = new AppUserPreferencesService(storage);
+    var preferences = preferencesService.Get();
+    var movies = await dbContext.Movies.AsNoTracking().ToListAsync();
+
+    var profiles = CreateWeightProfiles();
+    var excludedOutliers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "Lucia",
+        "Stalker"
+    };
+    var evaluations = new List<WeightProfileEvaluation>();
+
+    foreach (var profile in profiles)
+    {
+        var engine = new DeterministicRecommendationEngine(
+            dbContext,
+            new RecommendationFeatureExtractor(new PlotKeywordExtractor()),
+            new RecommendationExplainer(),
+            preferencesService,
+            profile.Profile);
+
+        var results = engine.CalculateResults(movies, preferences);
+        var comparable = movies
+            .Where(x => x.WatchedStatus == WatchedStatus.Watched && x.UserRating.HasValue)
+            .Select(movie => new ProfileGapRow(
+                movie.Title,
+                movie.UserRating!.Value,
+                results[movie.Id].FinalScore,
+                Math.Abs(results[movie.Id].FinalScore - movie.UserRating!.Value)))
+            .ToList();
+
+        var comparableForMetric = comparable
+            .Where(x => !excludedOutliers.Contains(x.Title))
+            .ToList();
+
+        var avgGap = comparableForMetric.Count == 0 ? 0m : comparableForMetric.Average(x => x.Gap);
+        var lowRatedOverscored = comparableForMetric.Count(x => x.UserRating <= 55m && x.NewScore >= 85m);
+        var lovedUnderscored = comparableForMetric.Count(x => x.UserRating >= 95m && x.NewScore <= 80m);
+        var likedInflated = comparableForMetric.Count(x => x.UserRating == 80m && x.NewScore >= 91m);
+        var composite = avgGap + (lowRatedOverscored * 0.45m) + (lovedUnderscored * 0.35m) + (likedInflated * 0.15m);
+
+        evaluations.Add(new WeightProfileEvaluation(
+            profile.Name,
+            profile.Profile,
+            decimal.Round(avgGap, 3),
+            lowRatedOverscored,
+            lovedUnderscored,
+            likedInflated,
+            decimal.Round(composite, 3),
+            comparable.OrderByDescending(x => x.Gap).Take(8).ToList()));
+    }
+
+    var best = evaluations
+        .OrderBy(x => x.CompositeScore)
+        .ThenBy(x => x.AverageGap)
+        .First();
+
+    Console.WriteLine($"DATABASE: {storage.DatabasePath}");
+    Console.WriteLine("PROFILE_RESULTS:");
+    foreach (var evaluation in evaluations.OrderBy(x => x.CompositeScore).ThenBy(x => x.AverageGap))
+    {
+        Console.WriteLine($"{evaluation.Name} | avgGap={evaluation.AverageGap:0.000} | lowRatedOverscored={evaluation.LowRatedOverscored} | lovedUnderscored={evaluation.LovedUnderscored} | likedInflated={evaluation.LikedInflated} | composite={evaluation.CompositeScore:0.000}");
+    }
+
+    Console.WriteLine();
+    Console.WriteLine($"BEST_PROFILE: {best.Name}");
+    Console.WriteLine($"BEST_AVG_GAP: {best.AverageGap:0.000}");
+    Console.WriteLine($"BEST_COMPOSITE: {best.CompositeScore:0.000}");
+    Console.WriteLine("BEST_BIGGEST_GAPS:");
+    foreach (var item in best.BiggestGaps)
+    {
+        Console.WriteLine($"{item.Title} | user={item.UserRating:0.0} | score={item.NewScore:0.0} | gap={item.Gap:0.0}");
+    }
+}
+
+static Movie MapLookupResultToPreviewMovie(MetadataLookupResult result, int tempId)
+{
+    return new Movie
+    {
+        Id = tempId,
+        Title = result.Title,
+        OriginalTitle = result.OriginalTitle,
+        NormalizedTitle = TitleNormalizer.Normalize(result.Title),
+        Year = result.Year,
+        Category = result.Category,
+        GenresCsv = result.GenresCsv,
+        MediaType = result.MediaType,
+        ImdbRating = result.ImdbRating,
+        ImdbVotes = result.ImdbVotes,
+        Metascore = result.Metascore,
+        RuntimeMinutes = result.RuntimeMinutes,
+        ReleasedOn = result.ReleasedOn,
+        Country = result.Country,
+        Language = result.Language,
+        Director = result.Director,
+        Writer = result.Writer,
+        Actors = result.Actors,
+        Overview = result.Overview,
+        PosterUrl = result.PosterUrl,
+        OmdbType = result.OmdbType,
+        OmdbRatingsJson = result.OmdbRatingsJson,
+        TmdbId = result.TmdbId,
+        TmdbKeywordsCsv = result.TmdbKeywordsCsv,
+        SimilarTitlesJson = result.SimilarTitlesJson,
+        ExternalRatingsJson = result.ExternalRatingsJson,
+        ExternalId = result.ExternalId,
+        ExternalSource = result.ExternalSource,
+        WatchedStatus = WatchedStatus.NotWatched,
+        NeedsTagReview = false,
+        IsDismissed = false,
+        UserRating = null,
+        UserGrade = null,
+        PrimaryVerdict = null,
+        ReasonTagsCsv = null,
+        NormalizedTagsCsv = null
+    };
 }
 
 static async Task RestoreFromExportAsync(string csvPath)
@@ -474,6 +831,12 @@ static void AssertGenreAwareTagGrouping()
     {
         throw new Exception("Expected horror genre tags to exclude comedy-only tags.");
     }
+
+    if (!general.Any(x => x.Label == "Boring" && x.Group == "Experience") ||
+        !general.Any(x => x.Label == "Weak story" && x.Group == "Story"))
+    {
+        throw new Exception("Expected new negative tags to be available in the general Experience/Story groups.");
+    }
 }
 
 static void AssertBestMatchUsesGenreDropdown()
@@ -505,6 +868,28 @@ static void AssertDiscoveryCardUsesStatusToggleLayout()
         if (!content.Contains(marker, StringComparison.Ordinal))
         {
             throw new Exception($"Expected discovery card markup to contain '{marker}'.");
+        }
+    }
+}
+
+static void AssertDiscoveryCardIncludesDismissToggleStates()
+{
+    var path = Path.Combine(FindProjectRoot(), "src", "LocalMovieVault.Web", "Views", "Shared", "_DiscoveryCard.cshtml");
+    var content = File.ReadAllText(path);
+
+    var requiredMarkers = new[]
+    {
+        "movie-card-dismiss-toggle",
+        "is-dismissed",
+        "is-suggested",
+        "js-toggle-dismiss-state"
+    };
+
+    foreach (var marker in requiredMarkers)
+    {
+        if (!content.Contains(marker, StringComparison.Ordinal))
+        {
+            throw new Exception($"Expected discovery card dismiss markup to contain '{marker}'.");
         }
     }
 }
@@ -576,6 +961,31 @@ static void AssertMovieDetailsViewUsesBottomEditAndDeleteActions()
     }
 }
 
+static void AssertMovieDetailsViewShowsDismissStatus()
+{
+    var path = Path.Combine(FindProjectRoot(), "src", "LocalMovieVault.Web", "Views", "Movies", "MovieDetails.cshtml");
+    var content = File.ReadAllText(path);
+
+    if (!content.Contains("details-dismiss-status", StringComparison.Ordinal) ||
+        !content.Contains("Model.DismissStatusText", StringComparison.Ordinal) ||
+        !content.Contains("js-toggle-dismiss-state", StringComparison.Ordinal))
+    {
+        throw new Exception("Expected movie details view to show the dismiss-status banner and dismiss-state action.");
+    }
+}
+
+static void AssertMovieDetailsViewShowsWowControls()
+{
+    var path = Path.Combine(FindProjectRoot(), "src", "LocalMovieVault.Web", "Views", "Movies", "MovieDetails.cshtml");
+    var content = File.ReadAllText(path);
+
+    if (!content.Contains("Wow pick", StringComparison.Ordinal) ||
+        !content.Contains("js-toggle-wow-state", StringComparison.Ordinal))
+    {
+        throw new Exception("Expected movie details view to expose wow status and wow toggle controls.");
+    }
+}
+
 static void AssertMovieDetailsViewModelUsesHeroSlotRules()
 {
     var completeMovie = new Movie
@@ -589,7 +999,7 @@ static void AssertMovieDetailsViewModelUsesHeroSlotRules()
         NormalizedTagsCsv = "Great acting, Original idea, Incredible visuals",
         PredictedScore = 88m
     };
-    var completeModel = MovieDetailsViewModel.Create(completeMovie, 50m);
+    var completeModel = MovieDetailsViewModel.Create(completeMovie, 50m, 1, 8);
     if (completeModel.ShowHeroReviewAction)
     {
         throw new Exception("Expected completed watched movies to show the rating slot instead of the hero review action.");
@@ -606,7 +1016,7 @@ static void AssertMovieDetailsViewModelUsesHeroSlotRules()
         NeedsTagReview = true,
         PredictedScore = 26.8m
     };
-    var reviewModel = MovieDetailsViewModel.Create(reviewMovie, 50m);
+    var reviewModel = MovieDetailsViewModel.Create(reviewMovie, 50m, 1, 8);
     if (!reviewModel.ShowHeroReviewAction)
     {
         throw new Exception("Expected watched movies that still need review to keep the hero review action.");
@@ -619,10 +1029,100 @@ static void AssertMovieDetailsViewModelUsesHeroSlotRules()
         WatchedStatus = WatchedStatus.NotWatched,
         PredictedScore = 72m
     };
-    var unwatchedModel = MovieDetailsViewModel.Create(unwatchedMovie, 50m);
+    var unwatchedModel = MovieDetailsViewModel.Create(unwatchedMovie, 50m, 1, 8);
     if (!unwatchedModel.ShowHeroReviewAction)
     {
         throw new Exception("Expected unwatched movies to show the hero review action.");
+    }
+
+    var dismissSuggestedMovie = new Movie
+    {
+        Title = "Dismiss Suggested",
+        MediaType = MediaType.Movie,
+        WatchedStatus = WatchedStatus.NotWatched,
+        PredictedScore = 42m
+    };
+    var dismissSuggestedModel = MovieDetailsViewModel.Create(dismissSuggestedMovie, 50m, 1, 8);
+    if (!dismissSuggestedModel.ShowDismissStatus ||
+        !string.Equals(dismissSuggestedModel.DismissStatusText, "Suggested dismiss", StringComparison.Ordinal))
+    {
+        throw new Exception("Expected low-score unwatched movies to expose the suggested-dismiss status.");
+    }
+}
+
+static void AssertPlotKeywordExtractorDropsJunkTokens()
+{
+    var extractor = new PlotKeywordExtractor();
+    var movie = new Movie
+    {
+        Title = "This Is the End",
+        Overview = "Six Los Angeles celebrities are stuck in James Franco's house after a series of devastating events just destroyed the city. Inside, the group not only have to face the apocalypse, but themselves."
+    };
+
+    var keywords = extractor.ExtractKeywords(movie).ToList();
+    var forbidden = new[] { "are", "but", "group", "face", "city", "franco's" };
+    foreach (var token in forbidden)
+    {
+        if (keywords.Contains(token, StringComparer.OrdinalIgnoreCase))
+        {
+            throw new Exception($"Expected junk token '{token}' to be filtered out, found [{string.Join(", ", keywords)}].");
+        }
+    }
+
+    if (!keywords.Contains("apocalypse", StringComparer.OrdinalIgnoreCase))
+    {
+        throw new Exception($"Expected meaningful token 'apocalypse' to survive filtering, found [{string.Join(", ", keywords)}].");
+    }
+}
+
+static void AssertTheRoomFixtureExtractsReviewDerivedSignals()
+{
+    var room = new Movie
+    {
+        Id = 91001,
+        Title = "The Room Fixture",
+        Year = 2003,
+        GenresCsv = "Drama",
+        Director = "Tommy Wiseau",
+        Writer = "Tommy Wiseau",
+        Actors = "Tommy Wiseau, Juliette Danielle, Greg Sestero",
+        Overview = "An amiable banker's perfect life is turned upside down when his bride-to-be has an affair with his best friend.",
+        Country = "United States",
+        Language = "English",
+        RuntimeMinutes = 99,
+        ImdbRating = 3.6m,
+        ImdbVotes = 98635,
+        Metascore = 9,
+        ExternalRatingsJson = """
+        [{"Source":"Internet Movie Database","Value":"3.6/10"},{"Source":"Rotten Tomatoes","Value":"24%"},{"Source":"Metacritic","Value":"9/100"}]
+        """
+    };
+
+    var signals = RecommendationCatalog.ExtractReviewDerivedSignals(room);
+
+    if (!signals.CraftRisks.Contains("weak-acting", StringComparer.OrdinalIgnoreCase))
+    {
+        throw new Exception("Expected The Room fixture to expose weak-acting as a review-derived craft risk.");
+    }
+
+    if (!signals.CraftRisks.Contains("weak-writing", StringComparer.OrdinalIgnoreCase))
+    {
+        throw new Exception("Expected The Room fixture to expose weak-writing as a review-derived craft risk.");
+    }
+
+    if (!signals.SpecialCases.Contains("so-bad-it-good", StringComparer.OrdinalIgnoreCase))
+    {
+        throw new Exception("Expected The Room fixture to expose so-bad-it-good as a special review-derived case.");
+    }
+
+    if (!signals.SpecialCases.Contains("severe-external-quality-risk", StringComparer.OrdinalIgnoreCase))
+    {
+        throw new Exception("Expected The Room fixture to expose severe-external-quality-risk as a special review-derived case.");
+    }
+
+    if (signals.QualityRiskScore < 80m)
+    {
+        throw new Exception($"Expected The Room fixture to carry severe quality risk, found {signals.QualityRiskScore:0.0}.");
     }
 }
 
@@ -668,7 +1168,7 @@ static async Task AssertMovieDetailsDetailsActionLoadsReferenceMovieAsync()
             {
               "title": "Wandering Earth 2",
               "verdict": 1,
-              "similarityScore": 1.5
+              "similarityScore": 24.0
             }
           ]
         }
@@ -688,6 +1188,73 @@ static async Task AssertMovieDetailsDetailsActionLoadsReferenceMovieAsync()
     if (!string.Equals(model.ReferenceMovie?.Title, "Wandering Earth 2", StringComparison.Ordinal))
     {
         throw new Exception($"Expected details action to resolve the comparison movie, found '{model.ReferenceMovie?.Title ?? "<null>"}'.");
+    }
+}
+
+static async Task AssertMovieDetailsDetailsActionSuppressesWeakGenreOnlyReferenceAsync()
+{
+    await using var connection = new SqliteConnection("Data Source=:memory:");
+    await connection.OpenAsync();
+
+    var options = new DbContextOptionsBuilder<AppDbContext>()
+        .UseSqlite(connection)
+        .Options;
+
+    await using var dbContext = new AppDbContext(options);
+    await dbContext.Database.EnsureCreatedAsync();
+
+    var referenceMovie = new Movie
+    {
+        Title = "Dark City",
+        NormalizedTitle = TitleNormalizer.Normalize("Dark City"),
+        MediaType = MediaType.Movie,
+        WatchedStatus = WatchedStatus.Watched,
+        UserRating = 95m,
+        UserGrade = UserGrade.Loved,
+        PrimaryVerdict = PersonalVerdict.Loved,
+        GenresCsv = "Fantasy, Mystery, Sci-Fi",
+        PredictedScore = 90m,
+        NormalizedTagsCsv = "Tense, Great worldbuilding, Original idea"
+    };
+
+    var candidateMovie = new Movie
+    {
+        Title = "Genre Only Candidate",
+        NormalizedTitle = TitleNormalizer.Normalize("Genre Only Candidate"),
+        MediaType = MediaType.Movie,
+        WatchedStatus = WatchedStatus.NotWatched,
+        GenresCsv = "Comedy, Fantasy, Sci-Fi",
+        PredictedScore = 92m,
+        RecommendationContextJson = """
+        {
+          "positiveFactors": [
+            { "label": "genre: comedy", "weight": 7.8, "isPositive": true },
+            { "label": "genre: sci-fi", "weight": 28.6, "isPositive": true }
+          ],
+          "similarToLiked": [
+            {
+              "title": "Dark City",
+              "verdict": 1,
+              "similarityScore": 16.0
+            }
+          ]
+        }
+        """
+    };
+
+    dbContext.Movies.AddRange(referenceMovie, candidateMovie);
+    await dbContext.SaveChangesAsync();
+
+    var controller = CreateMoviesController(dbContext, CreatePreferencesService());
+    var result = await controller.Details(candidateMovie.Id, CancellationToken.None);
+    if (result is not ViewResult viewResult || viewResult.Model is not MovieDetailsViewModel model)
+    {
+        throw new Exception("Expected details action to return the movie details view model.");
+    }
+
+    if (model.ReferenceMovie is not null)
+    {
+        throw new Exception($"Expected weak genre-only comparison anchor to be suppressed, found '{model.ReferenceMovie.Title}'.");
     }
 }
 
@@ -752,6 +1319,33 @@ static void AssertToggleUnwatchedUsesDedicatedToggleForm()
         !modalContent.Contains("asp-action=\"ToggleWatched\"", StringComparison.Ordinal))
     {
         throw new Exception("Expected shared watch modal markup to include a dedicated ToggleWatched form.");
+    }
+}
+
+static void AssertLibraryViewIncludesWowSection()
+{
+    var path = Path.Combine(FindProjectRoot(), "src", "LocalMovieVault.Web", "Views", "Movies", "Library.cshtml");
+    var content = File.ReadAllText(path);
+
+    if (!content.Contains("asp-route-section=\"wow\"", StringComparison.Ordinal) ||
+        !content.Contains("@Model.WowCount/@Model.WowLimit", StringComparison.Ordinal))
+    {
+        throw new Exception("Expected library view to expose a wow section button with used/limit formatting.");
+    }
+}
+
+static void AssertWatchModalIncludesToggleWowForm()
+{
+    var modalPath = Path.Combine(FindProjectRoot(), "src", "LocalMovieVault.Web", "Views", "Shared", "_WatchFeedbackModal.cshtml");
+    var modalContent = File.ReadAllText(modalPath);
+    var appMainPath = Path.Combine(FindProjectRoot(), "src", "LocalMovieVault.Web", "wwwroot", "js", "app-main.js");
+    var appMainContent = File.ReadAllText(appMainPath);
+
+    if (!modalContent.Contains("id=\"toggleWowForm\"", StringComparison.Ordinal) ||
+        !modalContent.Contains("asp-action=\"ToggleWow\"", StringComparison.Ordinal) ||
+        !appMainContent.Contains("js-toggle-wow-state", StringComparison.Ordinal))
+    {
+        throw new Exception("Expected wow toggle UI to include a dedicated fallback form and client-side binding.");
     }
 }
 
@@ -836,6 +1430,81 @@ static async Task AssertRecommendationUsesNormalizedTagsAsync()
     if (string.IsNullOrWhiteSpace(candidate.PredictedLabel))
     {
         throw new Exception("Expected candidate to receive a predicted grade label.");
+    }
+}
+
+static async Task AssertNewNegativeTagsPenalizeCandidateAsync()
+{
+    await using var connection = new SqliteConnection("Data Source=:memory:");
+    await connection.OpenAsync();
+
+    var options = new DbContextOptionsBuilder<AppDbContext>()
+        .UseSqlite(connection)
+        .Options;
+
+    await using var dbContext = new AppDbContext(options);
+    await dbContext.Database.EnsureCreatedAsync();
+
+    dbContext.Movies.AddRange(
+        new Movie
+        {
+            Title = "Loved Benchmark",
+            MediaType = MediaType.Movie,
+            WatchedStatus = WatchedStatus.Watched,
+            UserGrade = UserGrade.Loved,
+            PrimaryVerdict = PersonalVerdict.Loved,
+            UserRating = 95m,
+            GenresCsv = "Drama, Mystery",
+            NormalizedTagsCsv = "Thought-provoking, Great acting, Original idea",
+            Overview = "A thoughtful mystery with strong performances and an original idea.",
+            Year = 2024
+        },
+        new Movie
+        {
+            Title = "Negative Benchmark",
+            MediaType = MediaType.Movie,
+            WatchedStatus = WatchedStatus.Watched,
+            UserGrade = UserGrade.CouldntFinish,
+            PrimaryVerdict = PersonalVerdict.AvoidType,
+            UserRating = 20m,
+            GenresCsv = "Drama, Mystery",
+            NormalizedTagsCsv = "Boring, Weak story",
+            Overview = "A dull underwritten mystery with a weak story and no payoff.",
+            Year = 2023
+        },
+        new Movie
+        {
+            Title = "Target Candidate",
+            MediaType = MediaType.Movie,
+            WatchedStatus = WatchedStatus.NotWatched,
+            GenresCsv = "Drama, Mystery",
+            TmdbKeywordsCsv = "underwritten, weak story, no payoff",
+            Overview = "An underwritten mystery with a weak story and no payoff.",
+            Year = 2025
+        });
+
+    await dbContext.SaveChangesAsync();
+
+    var engine = new DeterministicRecommendationEngine(
+        dbContext,
+        new RecommendationFeatureExtractor(new PlotKeywordExtractor()),
+        new RecommendationExplainer(),
+        CreatePreferencesService());
+
+    var results = engine.CalculateResults(await dbContext.Movies.ToListAsync(), AppUserPreferences.CreateDefault());
+    var candidate = await dbContext.Movies.SingleAsync(x => x.Title == "Target Candidate");
+    var score = results[candidate.Id].FinalScore;
+    var reason = results[candidate.Id].PredictedReason;
+
+    if (score >= 70m)
+    {
+        throw new Exception($"Expected new negative tags to materially penalize the candidate, found score {score:0.0}.");
+    }
+
+    if (!reason.Contains("weak story", StringComparison.OrdinalIgnoreCase) &&
+        !reason.Contains("boring", StringComparison.OrdinalIgnoreCase))
+    {
+        throw new Exception($"Expected explanation to surface the new negative signals, found '{reason}'.");
     }
 }
 
@@ -1228,6 +1897,205 @@ static async Task AssertScoreCalibrationDoesNotOveruseTopBandAsync()
     }
 
     SmokeTrace("AssertScoreCalibrationDoesNotOveruseTopBandAsync: end");
+}
+
+static async Task AssertComedyHybridScoresBelowSeriousSciFiAgainstSeriousAnchorAsync()
+{
+    await using var connection = new SqliteConnection("Data Source=:memory:");
+    await connection.OpenAsync();
+
+    var options = new DbContextOptionsBuilder<AppDbContext>()
+        .UseSqlite(connection)
+        .Options;
+
+    await using var dbContext = new AppDbContext(options);
+    await dbContext.Database.EnsureCreatedAsync();
+
+    dbContext.Movies.AddRange(
+        new Movie
+        {
+            Title = "Serious Anchor",
+            MediaType = MediaType.Movie,
+            WatchedStatus = WatchedStatus.Watched,
+            UserGrade = UserGrade.Loved,
+            PrimaryVerdict = PersonalVerdict.Loved,
+            UserRating = 95m,
+            GenresCsv = "Sci-Fi, Thriller",
+            NormalizedTagsCsv = "Original idea, Tense, Thought-provoking",
+            Overview = "A tense science fiction thriller about identity and survival.",
+            Year = 2024
+        },
+        new Movie
+        {
+            Title = "Serious Candidate",
+            MediaType = MediaType.Movie,
+            WatchedStatus = WatchedStatus.NotWatched,
+            GenresCsv = "Sci-Fi, Mystery",
+            TmdbKeywordsCsv = "identity, survival, mystery",
+            Overview = "A reflective science fiction mystery about identity and survival.",
+            Year = 2025
+        },
+        new Movie
+        {
+            Title = "Comedy Hybrid Candidate",
+            MediaType = MediaType.Movie,
+            WatchedStatus = WatchedStatus.NotWatched,
+            GenresCsv = "Comedy, Sci-Fi",
+            TmdbKeywordsCsv = "absurd, comedy, suburban",
+            Overview = "An absurd science fiction comedy about a bizarre suburban trap.",
+            Year = 2025
+        });
+
+    await dbContext.SaveChangesAsync();
+
+    var engine = new DeterministicRecommendationEngine(
+        dbContext,
+        new RecommendationFeatureExtractor(new PlotKeywordExtractor()),
+        new RecommendationExplainer(),
+        CreatePreferencesService());
+
+    var results = engine.CalculateResults(await dbContext.Movies.ToListAsync(), AppUserPreferences.CreateDefault());
+    var seriousCandidate = await dbContext.Movies.SingleAsync(x => x.Title == "Serious Candidate");
+    var comedyCandidate = await dbContext.Movies.SingleAsync(x => x.Title == "Comedy Hybrid Candidate");
+    var seriousScore = results[seriousCandidate.Id].FinalScore;
+    var comedyScore = results[comedyCandidate.Id].FinalScore;
+
+    if (seriousScore <= comedyScore)
+    {
+        throw new Exception($"Expected serious sci-fi candidate ({seriousScore:0.0}) to score above sci-fi comedy candidate ({comedyScore:0.0}) against a serious anchor.");
+    }
+}
+
+static async Task AssertQuietDreadScoresBelowIntenseHorrorAgainstIntenseAnchorAsync()
+{
+    await using var connection = new SqliteConnection("Data Source=:memory:");
+    await connection.OpenAsync();
+
+    var options = new DbContextOptionsBuilder<AppDbContext>()
+        .UseSqlite(connection)
+        .Options;
+
+    await using var dbContext = new AppDbContext(options);
+    await dbContext.Database.EnsureCreatedAsync();
+
+    dbContext.Movies.AddRange(
+        new Movie
+        {
+            Title = "Intense Horror Anchor",
+            MediaType = MediaType.Movie,
+            WatchedStatus = WatchedStatus.Watched,
+            UserGrade = UserGrade.Loved,
+            PrimaryVerdict = PersonalVerdict.Loved,
+            UserRating = 95m,
+            GenresCsv = "Horror",
+            NormalizedTagsCsv = "Scary, Tense, Great acting",
+            Overview = "A demonic possession horror where friends summon terror and violent consequences follow.",
+            Year = 2024
+        },
+        new Movie
+        {
+            Title = "Intense Horror Candidate",
+            MediaType = MediaType.Movie,
+            WatchedStatus = WatchedStatus.NotWatched,
+            GenresCsv = "Horror",
+            TmdbKeywordsCsv = "possession, terror, friends",
+            Overview = "Friends trigger a terrifying possession and violent supernatural terror.",
+            Year = 2025
+        },
+        new Movie
+        {
+            Title = "Quiet Dread Candidate",
+            MediaType = MediaType.Movie,
+            WatchedStatus = WatchedStatus.NotWatched,
+            GenresCsv = "Drama, Horror, Mystery",
+            TmdbKeywordsCsv = "old house, nurse, ghost",
+            Overview = "A quiet nurse lives in an old house where a ghostly presence slowly emerges.",
+            Year = 2025
+        });
+
+    await dbContext.SaveChangesAsync();
+
+    var engine = new DeterministicRecommendationEngine(
+        dbContext,
+        new RecommendationFeatureExtractor(new PlotKeywordExtractor()),
+        new RecommendationExplainer(),
+        CreatePreferencesService());
+
+    var results = engine.CalculateResults(await dbContext.Movies.ToListAsync(), AppUserPreferences.CreateDefault());
+    var intenseCandidate = await dbContext.Movies.SingleAsync(x => x.Title == "Intense Horror Candidate");
+    var quietCandidate = await dbContext.Movies.SingleAsync(x => x.Title == "Quiet Dread Candidate");
+    var intenseScore = results[intenseCandidate.Id].FinalScore;
+    var quietScore = results[quietCandidate.Id].FinalScore;
+    var quietReason = results[quietCandidate.Id].PredictedReason;
+
+    if (intenseScore <= quietScore)
+    {
+        throw new Exception($"Expected intense horror candidate ({intenseScore:0.0}) to score above quiet dread candidate ({quietScore:0.0}) against an intense horror anchor.");
+    }
+
+    if (quietScore >= 90m)
+    {
+        throw new Exception($"Expected quiet dread candidate to stay out of the inflated top band against an intense horror anchor, found {quietScore:0.0}.");
+    }
+
+    if (quietReason.Contains("Strong evidence.", StringComparison.Ordinal))
+    {
+        throw new Exception($"Expected quiet dread candidate to avoid claiming strong evidence in the intense horror scenario, found '{quietReason}'.");
+    }
+}
+
+static async Task AssertBroadInferredMatchDoesNotClaimStrongEvidenceAsync()
+{
+    await using var connection = new SqliteConnection("Data Source=:memory:");
+    await connection.OpenAsync();
+
+    var options = new DbContextOptionsBuilder<AppDbContext>()
+        .UseSqlite(connection)
+        .Options;
+
+    await using var dbContext = new AppDbContext(options);
+    await dbContext.Database.EnsureCreatedAsync();
+
+    dbContext.Movies.AddRange(
+        new Movie
+        {
+            Title = "Reflective Anchor",
+            MediaType = MediaType.Movie,
+            WatchedStatus = WatchedStatus.Watched,
+            UserGrade = UserGrade.Loved,
+            PrimaryVerdict = PersonalVerdict.Loved,
+            UserRating = 95m,
+            GenresCsv = "Sci-Fi, Drama",
+            NormalizedTagsCsv = "Thought-provoking, Original idea, Great acting",
+            Overview = "A reflective science fiction drama about identity and memory.",
+            Year = 2024
+        },
+        new Movie
+        {
+            Title = "Broad Match Candidate",
+            MediaType = MediaType.Movie,
+            WatchedStatus = WatchedStatus.NotWatched,
+            GenresCsv = "Sci-Fi, Drama",
+            Overview = "A reflective science fiction drama about identity.",
+            Year = 2025
+        });
+
+    await dbContext.SaveChangesAsync();
+
+    var engine = new DeterministicRecommendationEngine(
+        dbContext,
+        new RecommendationFeatureExtractor(new PlotKeywordExtractor()),
+        new RecommendationExplainer(),
+        CreatePreferencesService());
+
+    var results = engine.CalculateResults(await dbContext.Movies.ToListAsync(), AppUserPreferences.CreateDefault());
+    var broadCandidate = await dbContext.Movies.SingleAsync(x => x.Title == "Broad Match Candidate");
+    var reason = results[broadCandidate.Id].PredictedReason;
+
+    if (reason.Contains("Strong evidence.", StringComparison.Ordinal))
+    {
+        throw new Exception($"Expected broad inferred match to avoid claiming strong evidence, found '{reason}'.");
+    }
 }
 
 static void AssertImportantTagsMigrateToCanonicalArray()
@@ -1785,6 +2653,53 @@ static void AssertAddLookupFormIncludesAntiForgeryToken()
     }
 }
 
+static void AssertAddViewRemovesManualScorePicker()
+{
+    var path = Path.Combine(FindProjectRoot(), "src", "LocalMovieVault.Web", "Views", "Movies", "Add.cshtml");
+    var content = File.ReadAllText(path);
+
+    if (content.Contains("Movie.UserRating", StringComparison.Ordinal) ||
+        content.Contains("for (var rating = 1; rating <= 10; rating++)", StringComparison.Ordinal))
+    {
+        throw new Exception("Expected the Add movie flow to remove the manual 1-10 score picker.");
+    }
+
+    if (!content.Contains("Movie.WatchedStatus", StringComparison.Ordinal))
+    {
+        throw new Exception("Expected the Add movie flow to keep the watched/not-watched state selector.");
+    }
+
+    if (!content.Contains(">Any<", StringComparison.Ordinal) ||
+        !content.Contains("Estimate match", StringComparison.Ordinal) ||
+        !content.Contains("Add to library", StringComparison.Ordinal))
+    {
+        throw new Exception("Expected the Add movie view to default year to Any and expose estimate/add actions.");
+    }
+}
+
+static void AssertStandaloneEditFormRemovesManualScorePicker()
+{
+    var path = Path.Combine(FindProjectRoot(), "src", "LocalMovieVault.Web", "Views", "Movies", "_MovieStandaloneFormFields.cshtml");
+    var content = File.ReadAllText(path);
+
+    if (content.Contains("asp-for=\"UserRating\"", StringComparison.Ordinal) ||
+        content.Contains("for (var rating = 1; rating <= 10; rating++)", StringComparison.Ordinal))
+    {
+        throw new Exception("Expected the standalone edit form to remove the manual 1-10 score picker.");
+    }
+}
+
+static void AssertMoviesControllerRemovesLegacySetRatingAction()
+{
+    var path = Path.Combine(FindProjectRoot(), "src", "LocalMovieVault.Web", "Controllers", "MoviesController.cs");
+    var content = File.ReadAllText(path);
+
+    if (content.Contains("Task<IActionResult> SetRating(", StringComparison.Ordinal))
+    {
+        throw new Exception("Expected the legacy SetRating endpoint to be removed after the watched/not-watched flow cleanup.");
+    }
+}
+
 static async Task AssertToggleWatchedClearsLegacyScoreAsync()
 {
     await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -1806,6 +2721,7 @@ static async Task AssertToggleWatchedClearsLegacyScoreAsync()
         PrimaryVerdict = PersonalVerdict.Liked,
         UserRating = 80m,
         NormalizedTagsCsv = "Great acting",
+        IsWowPick = true,
         Year = 2024
     };
     dbContext.Movies.Add(movie);
@@ -1820,13 +2736,15 @@ static async Task AssertToggleWatchedClearsLegacyScoreAsync()
         SettingsPath = settingsPath
     });
 
+    var engine = CreateRecommendationEngine(dbContext, preferences);
     var controller = new MoviesController(
         dbContext,
         new FakeMetadataService(),
         new MovieUpsertService(dbContext),
-        new PersonalMatchService(new DeterministicRecommendationEngine(dbContext, new RecommendationFeatureExtractor(new PlotKeywordExtractor()), new RecommendationExplainer(), preferences)),
+        new PersonalMatchService(engine),
         new MetadataBackfillService(dbContext, new FakeMetadataService()),
-        preferences);
+        preferences,
+        engine);
     controller.ControllerContext = new ControllerContext
     {
         HttpContext = new DefaultHttpContext()
@@ -1848,6 +2766,198 @@ static async Task AssertToggleWatchedClearsLegacyScoreAsync()
     if (updated.UserRating.HasValue || updated.UserGrade.HasValue || updated.PrimaryVerdict.HasValue)
     {
         throw new Exception("Expected toggle-to-unwatched to clear rating and grade fields.");
+    }
+
+    if (updated.IsWowPick)
+    {
+        throw new Exception("Expected toggle-to-unwatched to clear wow picks.");
+    }
+}
+
+static async Task AssertToggleWowRequiresCompletedReviewAsync()
+{
+    await using var connection = new SqliteConnection("Data Source=:memory:");
+    await connection.OpenAsync();
+
+    var options = new DbContextOptionsBuilder<AppDbContext>()
+        .UseSqlite(connection)
+        .Options;
+
+    await using var dbContext = new AppDbContext(options);
+    var migrator = new DatabaseSchemaMigrator();
+    await migrator.MigrateAsync(dbContext);
+
+    dbContext.Movies.Add(new Movie
+    {
+        Title = "Incomplete Wow Candidate",
+        MediaType = MediaType.Movie,
+        WatchedStatus = WatchedStatus.Watched,
+        UserGrade = UserGrade.Liked,
+        PrimaryVerdict = PersonalVerdict.Liked,
+        UserRating = 80m,
+        NeedsTagReview = true,
+        GenresCsv = "Horror"
+    });
+    await dbContext.SaveChangesAsync();
+
+    var controller = CreateMoviesController(dbContext, CreatePreferencesService());
+    var movieId = await dbContext.Movies.Select(x => x.Id).SingleAsync();
+    var result = await controller.ToggleWow(movieId, null, CancellationToken.None);
+
+    if (result is not JsonResult jsonResult)
+    {
+        throw new Exception("Expected wow toggle failure to return JSON for AJAX callers.");
+    }
+
+    var payload = JsonNode.Parse(JsonSerializer.Serialize(jsonResult.Value))?.AsObject()
+        ?? throw new Exception("Expected wow toggle JSON payload.");
+    if (payload["success"]?.GetValue<bool>() != false)
+    {
+        throw new Exception("Expected wow toggle to reject movies without a completed review.");
+    }
+}
+
+static async Task AssertToggleWowHonorsLimitAsync()
+{
+    await using var connection = new SqliteConnection("Data Source=:memory:");
+    await connection.OpenAsync();
+
+    var options = new DbContextOptionsBuilder<AppDbContext>()
+        .UseSqlite(connection)
+        .Options;
+
+    await using var dbContext = new AppDbContext(options);
+    var migrator = new DatabaseSchemaMigrator();
+    await migrator.MigrateAsync(dbContext);
+
+    for (var index = 0; index < 60; index++)
+    {
+        dbContext.Movies.Add(new Movie
+        {
+            Title = $"Wow Seed {index}",
+            MediaType = MediaType.Movie,
+            WatchedStatus = WatchedStatus.Watched,
+            UserGrade = UserGrade.Loved,
+            PrimaryVerdict = PersonalVerdict.Loved,
+            UserRating = 95m,
+            NeedsTagReview = false,
+            GenresCsv = "Horror",
+            NormalizedTagsCsv = "Great acting, Original idea, Great twist",
+            IsWowPick = index < 3
+        });
+    }
+
+    dbContext.Movies.Add(new Movie
+    {
+        Title = "Wow Limit Candidate",
+        MediaType = MediaType.Movie,
+        WatchedStatus = WatchedStatus.Watched,
+        UserGrade = UserGrade.Loved,
+        PrimaryVerdict = PersonalVerdict.Loved,
+        UserRating = 95m,
+        NeedsTagReview = false,
+        GenresCsv = "Horror",
+        NormalizedTagsCsv = "Great acting, Original idea, Great twist"
+    });
+    await dbContext.SaveChangesAsync();
+
+    var preferences = CreatePreferencesService();
+    var current = preferences.Get();
+    current.TasteTuning.WowLimitRatio = 0.01m;
+    current.TasteTuning.WowMinimumPicks = 3;
+    current.TasteTuning.WowMaximumPicks = 3;
+    preferences.Save(current);
+
+    var controller = CreateMoviesController(dbContext, preferences);
+    var candidateId = await dbContext.Movies.Where(x => x.Title == "Wow Limit Candidate").Select(x => x.Id).SingleAsync();
+    var result = await controller.ToggleWow(candidateId, null, CancellationToken.None);
+
+    if (result is not JsonResult jsonResult)
+    {
+        throw new Exception("Expected wow limit failure to return JSON.");
+    }
+
+    var payload = JsonNode.Parse(JsonSerializer.Serialize(jsonResult.Value))?.AsObject()
+        ?? throw new Exception("Expected wow limit JSON payload.");
+    if (payload["success"]?.GetValue<bool>() != false)
+    {
+        throw new Exception("Expected wow toggle to enforce the configured wow limit.");
+    }
+}
+
+static async Task AssertWowPickBoostsMatchingCandidateAsync()
+{
+    await using var connection = new SqliteConnection("Data Source=:memory:");
+    await connection.OpenAsync();
+
+    var options = new DbContextOptionsBuilder<AppDbContext>()
+        .UseSqlite(connection)
+        .Options;
+
+    await using var dbContext = new AppDbContext(options);
+    await dbContext.Database.EnsureCreatedAsync();
+
+    dbContext.Movies.AddRange(
+        new Movie
+        {
+            Title = "Wow Anchor",
+            MediaType = MediaType.Movie,
+            WatchedStatus = WatchedStatus.Watched,
+            UserGrade = UserGrade.Loved,
+            PrimaryVerdict = PersonalVerdict.Loved,
+            UserRating = 95m,
+            GenresCsv = "Sci-Fi, Thriller",
+            NormalizedTagsCsv = "Original idea, Great acting, Great twist",
+            TmdbKeywordsCsv = "future, reveal, identity",
+            Overview = "An inventive science fiction thriller with identity twists.",
+            IsWowPick = true
+        },
+        new Movie
+        {
+            Title = "Regular Anchor",
+            MediaType = MediaType.Movie,
+            WatchedStatus = WatchedStatus.Watched,
+            UserGrade = UserGrade.Loved,
+            PrimaryVerdict = PersonalVerdict.Loved,
+            UserRating = 95m,
+            GenresCsv = "Comedy",
+            NormalizedTagsCsv = "Funny, Charming, Great acting",
+            Overview = "A warm and funny comedy."
+        },
+        new Movie
+        {
+            Title = "Wow Candidate",
+            MediaType = MediaType.Movie,
+            WatchedStatus = WatchedStatus.NotWatched,
+            GenresCsv = "Sci-Fi, Thriller",
+            TmdbKeywordsCsv = "future, identity, reveal",
+            Overview = "A reflective science fiction thriller about identity and a major reveal."
+        });
+
+    await dbContext.SaveChangesAsync();
+
+    var preferences = CreatePreferencesService();
+    var engine = CreateRecommendationEngine(dbContext, preferences);
+    var movies = await dbContext.Movies.ToListAsync();
+    var wowCandidate = movies.Single(x => x.Title == "Wow Candidate");
+
+    var baseline = AppUserPreferences.CreateDefault();
+    baseline.TasteTuning.WowProfileWeightMultiplier = 1.0m;
+    baseline.TasteTuning.WowSimilarityWeightMultiplier = 1.0m;
+    baseline.TasteTuning.WowFinalBoost = 0m;
+    var baselineResults = engine.CalculateResults(movies, baseline);
+    var baselineScore = baselineResults[wowCandidate.Id].FinalScore;
+
+    var boosted = AppUserPreferences.CreateDefault();
+    boosted.TasteTuning.WowProfileWeightMultiplier = 2.2m;
+    boosted.TasteTuning.WowSimilarityWeightMultiplier = 1.4m;
+    boosted.TasteTuning.WowFinalBoost = 4.5m;
+    var boostedResults = engine.CalculateResults(movies, boosted);
+    var boostedScore = boostedResults[wowCandidate.Id].FinalScore;
+
+    if (boostedScore <= baselineScore)
+    {
+        throw new Exception($"Expected wow picks to boost a strong matching candidate, but score stayed {baselineScore:0.0}->{boostedScore:0.0}.");
     }
 }
 
@@ -1882,13 +2992,15 @@ static async Task AssertCompleteWatchRequiresThreeTagsAsync()
         SettingsPath = settingsPath
     });
 
+    var engine = CreateRecommendationEngine(dbContext, preferences);
     var controller = new MoviesController(
         dbContext,
         new FakeMetadataService(),
         new MovieUpsertService(dbContext),
-        new PersonalMatchService(new DeterministicRecommendationEngine(dbContext, new RecommendationFeatureExtractor(new PlotKeywordExtractor()), new RecommendationExplainer(), preferences)),
+        new PersonalMatchService(engine),
         new MetadataBackfillService(dbContext, new FakeMetadataService()),
-        preferences);
+        preferences,
+        engine);
     controller.ControllerContext = new ControllerContext
     {
         HttpContext = new DefaultHttpContext()
@@ -1938,13 +3050,15 @@ static async Task AssertCompleteWatchWritesAppEventAsync()
     await dbContext.SaveChangesAsync();
 
     var preferences = CreatePreferencesService();
+    var engine = CreateRecommendationEngine(dbContext, preferences);
     var controller = new MoviesController(
         dbContext,
         new FakeMetadataService(),
         new MovieUpsertService(dbContext),
-        new PersonalMatchService(new DeterministicRecommendationEngine(dbContext, new RecommendationFeatureExtractor(new PlotKeywordExtractor()), new RecommendationExplainer(), preferences)),
+        new PersonalMatchService(engine),
         new MetadataBackfillService(dbContext, new FakeMetadataService()),
-        preferences);
+        preferences,
+        engine);
     controller.ControllerContext = new ControllerContext
     {
         HttpContext = new DefaultHttpContext()
@@ -2277,13 +3391,15 @@ static async Task AssertDismissAndRestoreWriteAppEventsAsync()
     await dbContext.SaveChangesAsync();
 
     var preferences = CreatePreferencesService();
+    var engine = CreateRecommendationEngine(dbContext, preferences);
     var controller = new MoviesController(
         dbContext,
         new FakeMetadataService(),
         new MovieUpsertService(dbContext),
-        new PersonalMatchService(new DeterministicRecommendationEngine(dbContext, new RecommendationFeatureExtractor(new PlotKeywordExtractor()), new RecommendationExplainer(), preferences)),
+        new PersonalMatchService(engine),
         new MetadataBackfillService(dbContext, new FakeMetadataService()),
-        preferences);
+        preferences,
+        engine);
     controller.ControllerContext = new ControllerContext
     {
         HttpContext = new DefaultHttpContext()
@@ -2300,6 +3416,163 @@ static async Task AssertDismissAndRestoreWriteAppEventsAsync()
     if (dismissCount != 1 || restoreCount != 1)
     {
         throw new Exception($"Expected dismiss/restore app events, found dismiss={dismissCount}, restore={restoreCount}.");
+    }
+}
+
+static async Task AssertLibrarySearchQueriesAcrossSectionsAsync()
+{
+    await using var connection = new SqliteConnection("Data Source=:memory:");
+    await connection.OpenAsync();
+
+    var options = new DbContextOptionsBuilder<AppDbContext>()
+        .UseSqlite(connection)
+        .Options;
+
+    await using var dbContext = new AppDbContext(options);
+    var migrator = new DatabaseSchemaMigrator();
+    await migrator.MigrateAsync(dbContext);
+
+    dbContext.Movies.AddRange(
+        new Movie
+        {
+            Title = "Dismissed Search Match",
+            MediaType = MediaType.Movie,
+            WatchedStatus = WatchedStatus.NotWatched,
+            IsDismissed = true,
+            PredictedScore = 18m
+        },
+        new Movie
+        {
+            Title = "Healthy Match",
+            MediaType = MediaType.Movie,
+            WatchedStatus = WatchedStatus.NotWatched,
+            PredictedScore = 78m
+        });
+    await dbContext.SaveChangesAsync();
+
+    var controller = CreateMoviesController(dbContext, CreatePreferencesService());
+    var result = await controller.Index(section: "not-watched", query: "Dismissed Search Match", cancellationToken: CancellationToken.None);
+
+    if (result is not ViewResult viewResult || viewResult.Model is not MovieListViewModel model)
+    {
+        throw new Exception("Expected library search to return the library view model.");
+    }
+
+    if (model.Movies.Count != 1 || !string.Equals(model.Movies[0].Title, "Dismissed Search Match", StringComparison.Ordinal))
+    {
+        throw new Exception("Expected library search to search the whole database and include dismissed matches.");
+    }
+}
+
+static async Task AssertCreateWatchedWithReviewRedirectsToLibraryAsync()
+{
+    await using var connection = new SqliteConnection("Data Source=:memory:");
+    await connection.OpenAsync();
+
+    var options = new DbContextOptionsBuilder<AppDbContext>()
+        .UseSqlite(connection)
+        .Options;
+
+    await using var dbContext = new AppDbContext(options);
+    var migrator = new DatabaseSchemaMigrator();
+    await migrator.MigrateAsync(dbContext);
+
+    var preferences = CreatePreferencesService();
+    var engine = CreateRecommendationEngine(dbContext, preferences);
+    var controller = new MoviesController(
+        dbContext,
+        new FakeMetadataService(),
+        new MovieUpsertService(dbContext),
+        new PersonalMatchService(engine),
+        new MetadataBackfillService(dbContext, new FakeMetadataService()),
+        preferences,
+        engine);
+    controller.ControllerContext = new ControllerContext
+    {
+        HttpContext = new DefaultHttpContext()
+    };
+    controller.TempData = new Microsoft.AspNetCore.Mvc.ViewFeatures.TempDataDictionary(
+        controller.HttpContext,
+        new FakeTempDataProvider());
+
+    var model = new MovieEditViewModel
+    {
+        Title = "Watched Add Redirect",
+        MediaType = MediaType.Movie,
+        Year = 2024,
+        WatchedStatus = WatchedStatus.Watched,
+        GenresCsv = "Sci-Fi"
+    };
+
+    var result = await controller.Create(model, model.Title, model.Year, null, PersonalVerdict.Liked, ["Original idea", "Great acting", "Tense"], false, CancellationToken.None);
+    if (result is not RedirectToActionResult redirect ||
+        !string.Equals(redirect.ActionName, "Index", StringComparison.Ordinal))
+    {
+        throw new Exception("Expected watched-on-add with review to redirect back to Library.");
+    }
+
+    if (redirect.RouteValues is null ||
+        !redirect.RouteValues.TryGetValue("section", out var section) ||
+        !string.Equals(section?.ToString(), "watched", StringComparison.OrdinalIgnoreCase))
+    {
+        throw new Exception("Expected watched-on-add with review to return to the watched library section.");
+    }
+
+    var saved = await dbContext.Movies.SingleAsync(x => x.Title == "Watched Add Redirect");
+    if (saved.WatchedStatus != WatchedStatus.Watched ||
+        saved.PrimaryVerdict != PersonalVerdict.Liked ||
+        saved.UserRating != 80m)
+    {
+        throw new Exception("Expected watched-on-add with review to save a completed watched review.");
+    }
+}
+
+static async Task AssertDeleteFromDetailsRedirectsToLibraryAsync()
+{
+    await using var connection = new SqliteConnection("Data Source=:memory:");
+    await connection.OpenAsync();
+
+    var options = new DbContextOptionsBuilder<AppDbContext>()
+        .UseSqlite(connection)
+        .Options;
+
+    await using var dbContext = new AppDbContext(options);
+    var migrator = new DatabaseSchemaMigrator();
+    await migrator.MigrateAsync(dbContext);
+
+    var movie = new Movie
+    {
+        Title = "Delete Redirect Candidate",
+        MediaType = MediaType.Movie,
+        WatchedStatus = WatchedStatus.NotWatched,
+        Year = 2024
+    };
+    dbContext.Movies.Add(movie);
+    await dbContext.SaveChangesAsync();
+
+    var preferences = CreatePreferencesService();
+    var engine = CreateRecommendationEngine(dbContext, preferences);
+    var controller = new MoviesController(
+        dbContext,
+        new FakeMetadataService(),
+        new MovieUpsertService(dbContext),
+        new PersonalMatchService(engine),
+        new MetadataBackfillService(dbContext, new FakeMetadataService()),
+        preferences,
+        engine);
+    controller.ControllerContext = new ControllerContext
+    {
+        HttpContext = new DefaultHttpContext()
+    };
+    controller.TempData = new Microsoft.AspNetCore.Mvc.ViewFeatures.TempDataDictionary(
+        controller.HttpContext,
+        new FakeTempDataProvider());
+
+    var result = await controller.Delete(movie.Id, $"/Movies/Details/{movie.Id}", CancellationToken.None);
+    if (result is not RedirectToActionResult redirect
+        || !string.Equals(redirect.ActionName, "Index", StringComparison.Ordinal))
+    {
+        throw new Exception("Expected deleting from details to redirect back to the library instead of the deleted details page.");
     }
 }
 
@@ -2425,19 +3698,170 @@ static AppUserPreferences CreatePreferencesWithImportantTags(params string[] tag
 
 static MoviesController CreateMoviesController(AppDbContext dbContext, AppUserPreferencesService preferences)
 {
+    var engine = CreateRecommendationEngine(dbContext, preferences);
     var controller = new MoviesController(
         dbContext,
         new FakeMetadataService(),
         new MovieUpsertService(dbContext),
-        new PersonalMatchService(new DeterministicRecommendationEngine(dbContext, new RecommendationFeatureExtractor(new PlotKeywordExtractor()), new RecommendationExplainer(), preferences)),
+        new PersonalMatchService(engine),
         new MetadataBackfillService(dbContext, new FakeMetadataService()),
-        preferences);
+        preferences,
+        engine);
     controller.ControllerContext = new ControllerContext
     {
         HttpContext = new DefaultHttpContext()
     };
     controller.ControllerContext.HttpContext.Request.Headers["X-Requested-With"] = "XMLHttpRequest";
     return controller;
+}
+
+static DeterministicRecommendationEngine CreateRecommendationEngine(
+    AppDbContext dbContext,
+    AppUserPreferencesService preferences,
+    RecommendationWeightProfile? weights = null)
+    => new(dbContext, new RecommendationFeatureExtractor(new PlotKeywordExtractor()), new RecommendationExplainer(), preferences, weights);
+
+static IReadOnlyList<NamedWeightProfile> CreateWeightProfiles()
+{
+    var baseline = RecommendationWeightProfile.CreateDefault();
+
+    return
+    [
+        new NamedWeightProfile("baseline", baseline),
+        new NamedWeightProfile(
+            "anchor-heavy",
+            baseline with
+            {
+                BroadFitScale = 2.85m,
+                SimilarityScale = 31.5m,
+                FinalScoreScale = 0.86m,
+                RankBonusScale = 2.0m,
+                ConfidenceAdjustmentScale = 0.07m,
+                StrongPositiveConfidenceScale = 4.9m
+            }),
+        new NamedWeightProfile(
+            "anchor-heavy-quiet-strict",
+            baseline with
+            {
+                BroadFitScale = 2.85m,
+                SimilarityScale = 31.8m,
+                FinalScoreScale = 0.855m,
+                RankBonusScale = 1.9m,
+                ConfidenceAdjustmentScale = 0.07m,
+                BroadMatchConfidencePenalty = 18m,
+                QuietAtmosphericConfidencePenalty = 7m,
+                WeakQuietAnchorConfidencePenalty = 12m,
+                InferredCalibrationPenalty = 3.0m,
+                QuietAtmosphericCalibrationPenalty = 2.5m,
+                WeakQuietAnchorCalibrationPenalty = 3.4m,
+                QuietIntenseMismatchPenalty = 0.15m
+            }),
+        new NamedWeightProfile(
+            "balanced-top-band",
+            baseline with
+            {
+                BroadFitScale = 2.95m,
+                SimilarityScale = 30.5m,
+                FinalScoreScale = 0.85m,
+                RankBonusScale = 1.8m,
+                ConfidenceAdjustmentScale = 0.065m,
+                InferredCalibrationPenalty = 2.9m,
+                QuietAtmosphericCalibrationPenalty = 2.2m,
+                TopBandGuardPenalty = 1.8m
+            }),
+        new NamedWeightProfile(
+            "loved-recovery",
+            baseline with
+            {
+                BroadFitScale = 2.9m,
+                SimilarityScale = 32.2m,
+                FinalScoreScale = 0.86m,
+                RankBonusScale = 2.15m,
+                ConfidenceAdjustmentScale = 0.07m,
+                StrongPositiveConfidenceScale = 5.2m,
+                SimilarityEvidenceCap = 24m,
+                InferredCalibrationPenalty = 2.7m,
+                QuietAtmosphericCalibrationPenalty = 2.1m
+            }),
+        new NamedWeightProfile(
+            "mid-anchor-balance",
+            baseline with
+            {
+                BroadFitScale = 2.72m,
+                SimilarityScale = 32.8m,
+                FinalScoreScale = 0.845m,
+                RankBonusScale = 1.75m,
+                ConfidenceAdjustmentScale = 0.066m,
+                StrongPositiveConfidenceScale = 5.0m,
+                SimilarityEvidenceCap = 24m,
+                InferredCalibrationPenalty = 2.95m,
+                QuietAtmosphericCalibrationPenalty = 2.35m,
+                WeakQuietAnchorCalibrationPenalty = 3.1m,
+                TopBandGuardPenalty = 1.8m,
+                BroadMatchConfidencePenalty = 17m,
+                QuietAtmosphericConfidencePenalty = 6.5m,
+                WeakQuietAnchorConfidencePenalty = 11m,
+                IndiaCalibrationPenalty = 1.35m
+            }),
+        new NamedWeightProfile(
+            "mid-anchor-loved-protect",
+            baseline with
+            {
+                BroadFitScale = 2.64m,
+                SimilarityScale = 33.7m,
+                FinalScoreScale = 0.835m,
+                RankBonusScale = 1.6m,
+                ConfidenceAdjustmentScale = 0.062m,
+                StrongPositiveConfidenceScale = 5.2m,
+                SimilarityEvidenceCap = 25m,
+                InferredCalibrationPenalty = 3.0m,
+                QuietAtmosphericCalibrationPenalty = 2.45m,
+                WeakQuietAnchorCalibrationPenalty = 3.25m,
+                TopBandGuardPenalty = 1.95m,
+                BroadMatchConfidencePenalty = 17.5m,
+                QuietAtmosphericConfidencePenalty = 6.8m,
+                WeakQuietAnchorConfidencePenalty = 11.5m,
+                IndiaCalibrationPenalty = 1.4m
+            }),
+        new NamedWeightProfile(
+            "aggressive-anchor",
+            baseline with
+            {
+                BroadFitScale = 2.55m,
+                SimilarityScale = 34.0m,
+                FinalScoreScale = 0.82m,
+                RankBonusScale = 1.45m,
+                ConfidenceAdjustmentScale = 0.06m,
+                InferredCalibrationPenalty = 3.2m,
+                QuietAtmosphericCalibrationPenalty = 2.8m,
+                WeakQuietAnchorCalibrationPenalty = 3.8m,
+                TopBandGuardPenalty = 2.3m,
+                BroadMatchConfidencePenalty = 18m,
+                QuietAtmosphericConfidencePenalty = 7m,
+                WeakQuietAnchorConfidencePenalty = 12m,
+                IndiaCalibrationPenalty = 1.5m
+            }),
+        new NamedWeightProfile(
+            "aggressive-anchor-loved-protect",
+            baseline with
+            {
+                BroadFitScale = 2.45m,
+                SimilarityScale = 35.6m,
+                FinalScoreScale = 0.81m,
+                RankBonusScale = 1.35m,
+                ConfidenceAdjustmentScale = 0.055m,
+                StrongPositiveConfidenceScale = 5.4m,
+                SimilarityEvidenceCap = 26m,
+                InferredCalibrationPenalty = 3.1m,
+                QuietAtmosphericCalibrationPenalty = 2.7m,
+                WeakQuietAnchorCalibrationPenalty = 3.7m,
+                TopBandGuardPenalty = 2.2m,
+                BroadMatchConfidencePenalty = 18m,
+                QuietAtmosphericConfidencePenalty = 7m,
+                WeakQuietAnchorConfidencePenalty = 12m,
+                IndiaCalibrationPenalty = 1.5m
+            })
+    ];
 }
 
 static JsonObject ExpectJsonResult(IActionResult result)
@@ -2483,3 +3907,17 @@ sealed class FakeTempDataProvider : Microsoft.AspNetCore.Mvc.ViewFeatures.ITempD
     {
     }
 }
+
+sealed record NamedWeightProfile(string Name, RecommendationWeightProfile Profile);
+
+sealed record ProfileGapRow(string Title, decimal UserRating, decimal NewScore, decimal Gap);
+
+sealed record WeightProfileEvaluation(
+    string Name,
+    RecommendationWeightProfile Profile,
+    decimal AverageGap,
+    int LowRatedOverscored,
+    int LovedUnderscored,
+    int LikedInflated,
+    decimal CompositeScore,
+    IReadOnlyList<ProfileGapRow> BiggestGaps);

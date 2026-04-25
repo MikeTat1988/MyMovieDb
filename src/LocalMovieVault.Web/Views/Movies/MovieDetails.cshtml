@@ -5,7 +5,13 @@
     ViewData["Title"] = Model.Movie.Title;
     var movie = Model.Movie;
     var isWatched = movie.WatchedStatus == WatchedStatus.Watched;
-    var returnUrl = Url.Action("Details", "Movies", new { id = movie.Id }) ?? $"/Movies/Details/{movie.Id}";
+    var preferredReturnUrl = Context.Request.Query["returnUrl"].ToString();
+    var openReviewOnLoad = string.Equals(Context.Request.Query["openReview"], "true", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(Context.Request.Query["openReview"], "1", StringComparison.OrdinalIgnoreCase);
+    var returnUrl = string.IsNullOrWhiteSpace(preferredReturnUrl)
+        ? Url.Action("Details", "Movies", new { id = movie.Id }) ?? $"/Movies/Details/{movie.Id}"
+        : preferredReturnUrl;
+    var watchButtonState = openReviewOnLoad ? "unwatched" : (isWatched ? "watched" : "unwatched");
     var reasonTags = RecommendationViewHelper.JoinCsv(RecommendationViewHelper.SplitCsv(movie.NormalizedTagsCsv ?? movie.ReasonTagsCsv));
 }
 
@@ -58,16 +64,17 @@
                             data-primary-verdict="@(movie.PrimaryVerdict?.ToString() ?? string.Empty)"
                             data-reason-tags="@reasonTags"
                             data-return-url="@returnUrl"
-                            data-watched="@(isWatched ? "watched" : "unwatched")">
+                            data-watched="@watchButtonState"
+                            data-allow-review-later="@(openReviewOnLoad ? "true" : "false")">
                         <span class="details-hero-slot-title">@Model.HeroSlotTitle</span>
                         <span class="details-hero-slot-subtitle">@Model.HeroSlotSubtitle</span>
                     </button>
                 }
                 else
                 {
-                    <div class="details-hero-slot details-hero-slot-full">
+                    <div class="details-hero-slot details-hero-slot-full details-hero-slot-rating">
                         <span class="details-hero-slot-title">@Model.HeroSlotTitle</span>
-                        <span class="details-hero-slot-subtitle">@Model.HeroSlotSubtitle</span>
+                        <span class="details-hero-slot-subtitle details-hero-slot-subtitle-strong">@Model.HeroSlotSubtitle</span>
                     </div>
                 }
 
@@ -78,6 +85,19 @@
                         <p class="details-info-copy">@movie.Overview</p>
                     </section>
                 }
+
+                @if (Model.ShowDismissStatus)
+                {
+                    <div class="details-dismiss-status @(Model.IsDismissed ? "is-dismissed" : "is-suggested")">
+                        @Model.DismissStatusText
+                    </div>
+                }
+
+                <section class="details-info-card">
+                    <div class="details-info-label">Wow pick</div>
+                    <p class="details-info-copy">@(Model.IsWowPick ? "This title is one of your curated wow anchors." : "Use wow for rare top-tier anchors, not ordinary favorites.")</p>
+                    <div class="details-meta-value">@Model.WowStatusText</div>
+                </section>
 
                 <section class="details-info-card">
                     <div class="details-info-label">Rating explanation</div>
@@ -155,9 +175,32 @@
                             data-primary-verdict="@(movie.PrimaryVerdict?.ToString() ?? string.Empty)"
                             data-reason-tags="@reasonTags"
                             data-return-url="@returnUrl"
-                            data-watched="@(isWatched ? "watched" : "unwatched")">
+                            data-watched="@watchButtonState"
+                            data-allow-review-later="@(openReviewOnLoad ? "true" : "false")">
                         Edit review
                     </button>
+
+                    <button class="button @(Model.IsWowPick ? "primary" : "subtle") js-toggle-wow-state"
+                            type="button"
+                            data-movie-id="@movie.Id"
+                            data-movie-title="@movie.Title"
+                            data-return-url="@returnUrl"
+                            data-wow="@(Model.IsWowPick ? "true" : "false")"
+                            @(Model.CanToggleWow && Model.WowSlotsAvailable ? null : "disabled")>
+                        @(Model.IsWowPick ? "Remove wow" : "Mark wow")
+                    </button>
+
+                    @if (Model.IsDismissed || Model.IsDismissSuggested)
+                    {
+                        <button class="button @(Model.IsDismissed ? "subtle" : "danger") js-toggle-dismiss-state"
+                                type="button"
+                                data-movie-id="@movie.Id"
+                                data-movie-title="@movie.Title"
+                                data-return-url="@returnUrl"
+                                data-dismissed="@(Model.IsDismissed ? "true" : "false")">
+                            @(Model.IsDismissed ? "Restore dismissed" : "Dismiss")
+                        </button>
+                    }
 
                     <form asp-action="Delete" method="post" class="details-delete-form">
                         @Html.AntiForgeryToken()
@@ -172,3 +215,19 @@
 </section>
 
 <partial name="_WatchFeedbackModal" />
+
+@if (openReviewOnLoad)
+{
+    <button class="js-open-watch-modal js-auto-open-watch-modal"
+            type="button"
+            hidden
+            data-movie-id="@movie.Id"
+            data-movie-title="@movie.Title"
+            data-movie-genre="@movie.GenresCsv"
+            data-primary-verdict="@(movie.PrimaryVerdict?.ToString() ?? string.Empty)"
+            data-reason-tags="@reasonTags"
+            data-return-url="@returnUrl"
+            data-watched="unwatched"
+            data-allow-review-later="true"
+            data-force-redirect-url="@returnUrl">Auto open review</button>
+}

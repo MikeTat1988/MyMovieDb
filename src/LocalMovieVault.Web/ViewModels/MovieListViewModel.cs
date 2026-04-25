@@ -9,6 +9,8 @@ public class MovieListViewModel
     public int WatchedCount { get; set; }
     public int ReviewCount { get; set; }
     public int DismissedCount { get; set; }
+    public int WowCount { get; set; }
+    public int WowLimit { get; set; }
     public string Section { get; set; } = "not-watched";
     public string? Query { get; set; }
     public string? Genre { get; set; }

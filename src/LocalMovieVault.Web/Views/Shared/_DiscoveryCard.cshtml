@@ -3,6 +3,7 @@
 @model Movie
 @{
     var score = RecommendationViewHelper.GetDisplayMatchScore(Model);
+    var dismissThreshold = ViewData["DismissScoreThreshold"] is decimal threshold ? threshold : 50m;
     var detailUrl = Url.Action("Details", "Movies", new { id = Model.Id }) ?? "#";
     var reviewReturnUrl = detailUrl;
     var reviewTabUrl = Url.Action("Index", "Movies", new { section = "review" }) ?? "/Movies?section=review";
@@ -13,6 +14,8 @@
         ? "https://www.youtube.com"
         : $"https://www.youtube.com/results?search_query={System.Net.WebUtility.UrlEncode(trailerQuery)}";
     var isWatched = Model.WatchedStatus == WatchedStatus.Watched;
+    var isDismissed = Model.IsDismissed;
+    var isDismissSuggested = MovieStateHelper.IsDismissSuggested(Model, dismissThreshold);
     var hasCompletedReview = RecommendationViewHelper.HasCompletedReview(Model);
     var watchActionReturnUrl = $"{Context.Request.Path}{Context.Request.QueryString}";
     var primaryGenre = RecommendationViewHelper.SplitCsv(Model.GenresCsv).FirstOrDefault() ?? "No genre";
@@ -21,16 +24,22 @@
         && !Model.NeedsTagReview
         && Model.UserRating.HasValue
         && Model.UserGrade.HasValue;
-    var reviewActionLabel = !isWatched
-        ? "Review"
-        : hasCompletedReview
-            ? "Edit review"
-            : "Finish review";
-    var cardStateLabel = !isWatched
-        ? "Queued"
-        : hasCompletedReview
-            ? "Ready"
-            : "Review later";
+    var reviewActionLabel = isDismissed
+        ? "View details"
+        : !isWatched
+            ? "Review"
+            : hasCompletedReview
+                ? "Edit review"
+                : "Finish review";
+    var cardStateLabel = isDismissed
+        ? "Dismissed"
+        : isDismissSuggested
+            ? "Suggested dismiss"
+            : !isWatched
+                ? "Queued"
+                : hasCompletedReview
+                    ? "Ready"
+                    : "Review later";
     var fitLabel = score switch
     {
         >= 82m => "Strong fit",
@@ -41,6 +50,13 @@
     };
     var watchToggleClass = isWatched ? "movie-card-status-toggle is-watched js-toggle-unwatched" : "movie-card-status-toggle is-unwatched js-open-watch-modal";
     var watchToggleLabel = isWatched ? "Mark unwatched" : "Mark watched or review later";
+    var dismissToggleClass = isDismissed
+        ? "movie-card-dismiss-toggle is-dismissed js-toggle-dismiss-state"
+        : isDismissSuggested
+            ? "movie-card-dismiss-toggle is-suggested js-toggle-dismiss-state"
+            : "movie-card-dismiss-toggle is-hidden";
+    var dismissToggleLabel = isDismissed ? "Restore dismissed movie" : isDismissSuggested ? "Dismiss movie" : "Dismiss unavailable";
+    var wowToggleLabel = Model.IsWowPick ? "Remove wow pick" : "Mark as wow pick";
 }
 
 <article class="movie-card discovery-card"
@@ -52,6 +68,17 @@
          data-primary-verdict="@(Model.PrimaryVerdict?.ToString() ?? string.Empty)"
          data-reason-tags="@RecommendationViewHelper.JoinCsv(RecommendationViewHelper.SplitCsv(Model.NormalizedTagsCsv ?? Model.ReasonTagsCsv))">
     <div class="movie-card-media">
+        <button class="@dismissToggleClass"
+                type="button"
+                aria-label="@dismissToggleLabel"
+                title="@dismissToggleLabel"
+                data-movie-id="@Model.Id"
+                data-movie-title="@Model.Title"
+                data-return-url="@watchActionReturnUrl"
+                data-dismissed="@(isDismissed ? "true" : "false")"
+                disabled="@(!isDismissed && !isDismissSuggested)">
+            <span aria-hidden="true">X</span>
+        </button>
         <a class="movie-card-poster-link" href="@detailUrl">
             @if (!string.IsNullOrWhiteSpace(Model.PosterUrl))
             {
@@ -84,9 +111,15 @@
 
     <div class="movie-card-body compact-body">
         <div class="movie-card-eyebrow">@cardStateLabel</div>
-        <h3 class="movie-card-title">
-            <a class="movie-card-title-link" href="@detailUrl">@Model.Title</a>
-        </h3>
+        @if (Model.IsWowPick)
+        {
+            <div class="movie-card-eyebrow">Wow pick</div>
+        }
+        <div class="movie-card-title-frame">
+            <h3 class="movie-card-title">
+                <a class="movie-card-title-link" href="@detailUrl">@Model.Title</a>
+            </h3>
+        </div>
 
         <div class="movie-card-meta-line">@metaLine</div>
 
@@ -114,17 +147,41 @@
 
         <div class="card-actions compact-card-actions movie-card-actions">
             <div class="movie-card-action-group">
-                <a class="button small js-open-watch-modal"
-                   href="@detailUrl"
-                   data-movie-id="@Model.Id"
-                   data-movie-title="@Model.Title"
-                   data-movie-genre="@Model.GenresCsv"
-                   data-movie-genre-display="@primaryGenre"
-                   data-primary-verdict="@(Model.PrimaryVerdict?.ToString() ?? string.Empty)"
-                   data-reason-tags="@RecommendationViewHelper.JoinCsv(RecommendationViewHelper.SplitCsv(Model.NormalizedTagsCsv ?? Model.ReasonTagsCsv))"
-                   data-return-url="@reviewReturnUrl"
-                   data-review-tab-url="@reviewTabUrl"
-                   data-watched="@(isWatched ? "watched" : "unwatched")">@reviewActionLabel</a>
+                @if (isWatched && hasCompletedReview)
+                {
+                    <button class="button small @(Model.IsWowPick ? "primary" : "subtle") js-toggle-wow-state"
+                            type="button"
+                            title="@wowToggleLabel"
+                            data-movie-id="@Model.Id"
+                            data-movie-title="@Model.Title"
+                            data-return-url="@watchActionReturnUrl"
+                            data-wow="@(Model.IsWowPick ? "true" : "false")">
+                        @(Model.IsWowPick ? "Wow" : "Mark wow")
+                    </button>
+                }
+                @if (isDismissed)
+                {
+                    <button class="button small js-toggle-dismiss-state"
+                            type="button"
+                            data-movie-id="@Model.Id"
+                            data-movie-title="@Model.Title"
+                            data-return-url="@watchActionReturnUrl"
+                            data-dismissed="true">Restore</button>
+                }
+                else
+                {
+                    <a class="button small js-open-watch-modal"
+                       href="@detailUrl"
+                       data-movie-id="@Model.Id"
+                       data-movie-title="@Model.Title"
+                       data-movie-genre="@Model.GenresCsv"
+                       data-movie-genre-display="@primaryGenre"
+                       data-primary-verdict="@(Model.PrimaryVerdict?.ToString() ?? string.Empty)"
+                       data-reason-tags="@RecommendationViewHelper.JoinCsv(RecommendationViewHelper.SplitCsv(Model.NormalizedTagsCsv ?? Model.ReasonTagsCsv))"
+                       data-return-url="@reviewReturnUrl"
+                       data-review-tab-url="@reviewTabUrl"
+                       data-watched="@(isWatched ? "watched" : "unwatched")">@reviewActionLabel</a>
+                }
                 <a class="button small" href="@trailerUrl" target="_blank" rel="noopener">Trailer</a>
             </div>
         </div>

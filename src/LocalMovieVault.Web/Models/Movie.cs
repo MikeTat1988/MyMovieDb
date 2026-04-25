@@ -74,6 +74,7 @@ public class Movie
     public string? NormalizedTagsCsv { get; set; }
 
     public bool NeedsTagReview { get; set; }
+    public bool IsWowPick { get; set; }
 
     [MaxLength(300)]
     public string? TagsCsv { get; set; }

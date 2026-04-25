@@ -69,10 +69,33 @@ public sealed class RecommendationExplainer : IRecommendationExplainer
     }
 
     private static string FormatFactor(ExplanationFactor factor)
-        => factor.Label.Replace("tag: ", string.Empty, StringComparison.OrdinalIgnoreCase);
+        => FormatFactorLabel(factor.Label);
+
+    private static string FormatFactorLabel(string label)
+    {
+        foreach (var prefix in new[] { "tag: ", "tone: ", "hybrid: ", "genre mix: ", "genre: ", "story: ", "priority: ", "preference: " })
+        {
+            if (label.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return label[prefix.Length..].Trim();
+            }
+        }
+
+        return label.Trim();
+    }
 
     private static string BuildEvidenceSuffix(RecommendationContext context)
     {
+        if (context.WarningFactors.Any(x => string.Equals(x, "Broad match", StringComparison.OrdinalIgnoreCase)))
+        {
+            return ". Broad evidence.";
+        }
+
+        if (context.WarningFactors.Any(x => string.Equals(x, "Soft anchor", StringComparison.OrdinalIgnoreCase)))
+        {
+            return ". Limited evidence.";
+        }
+
         if (context.ConfidenceScore >= 72m)
         {
             return ". Strong evidence.";

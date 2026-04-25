@@ -15,8 +15,7 @@ public sealed class PlotKeywordExtractor : IPlotKeywordExtractor
 
         var tokens = Regex.Matches(source.ToLowerInvariant(), @"[a-z0-9][a-z0-9'\-]{2,}")
             .Select(x => x.Value.Trim('\'', '-'))
-            .Where(x => x.Length >= 3)
-            .Where(x => !RecommendationCatalog.KeywordStopWords.Contains(x))
+            .Where(IsMeaningfulKeyword)
             .GroupBy(x => x)
             .OrderByDescending(x => x.Count())
             .ThenBy(x => x.Key, StringComparer.Ordinal)
@@ -25,5 +24,26 @@ public sealed class PlotKeywordExtractor : IPlotKeywordExtractor
             .ToList();
 
         return tokens;
+    }
+
+    private static bool IsMeaningfulKeyword(string token)
+    {
+        if (token.Length < 4)
+        {
+            return false;
+        }
+
+        if (!token.Any(char.IsLetter))
+        {
+            return false;
+        }
+
+        if (token.Contains('\'', StringComparison.Ordinal) || token.Contains('-', StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return !RecommendationCatalog.KeywordStopWords.Contains(token)
+            && !RecommendationCatalog.GenericPlotKeywordWords.Contains(token);
     }
 }

@@ -152,6 +152,13 @@ public sealed class TasteTuningSettings
     public decimal CrossGenreAnchorWeight { get; set; } = 1.18m;
     public decimal NegativePacingPenaltyWeight { get; set; } = 1.15m;
     public decimal DialogueActingSynergyMultiplier { get; set; } = 1.22m;
+    public decimal WowProfileWeightMultiplier { get; set; } = 1.75m;
+    public decimal WowSimilarityWeightMultiplier { get; set; } = 1.25m;
+    public decimal WowFinalBoost { get; set; } = 4.0m;
+    public decimal WowMinimumSimilarityForBoost { get; set; } = 18m;
+    public decimal WowLimitRatio { get; set; } = 0.05m;
+    public int WowMinimumPicks { get; set; } = 3;
+    public int WowMaximumPicks { get; set; } = 8;
 
     public static TasteTuningSettings CreateDefault() => new();
 }
