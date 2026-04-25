@@ -130,6 +130,55 @@ Expected: PASS for signal extraction once The Room fixture yields `severe-extern
 
 ---
 
+### Task 1.5: Audit Real Review Evidence for Mismatch Movies
+
+**Files:**
+- Create: `C:\Dev\MovieDb\docs\superpowers\specs\2026-04-25-review-evidence-audit.md`
+- Modify: `C:\Dev\MovieDb\docs\superpowers\plans\2026-04-25-review-derived-recommendation-calibration.md`
+
+- [x] **Step 1: Check local TMDb API availability**
+
+Current user settings have `MetadataProviders:TmDb:ApiKey = null`, so production TMDb API review fetching is not available locally yet.
+
+- [x] **Step 2: Gather real review evidence from safe public sources**
+
+Use TMDb review pages when searchable, plus Rotten Tomatoes, Metacritic, IMDb user-review pages, and reputable review pages. Record sources and keep extracted data structured; do not treat search snippets as personal taste.
+
+- [x] **Step 3: Extract structured signals per mismatch movie**
+
+Audit:
+
+```text
+The Room
+Genocyber
+Lucia
+Sinners
+Until Dawn
+```
+
+For each movie, classify:
+
+```text
+external quality
+craft risks
+taste descriptors
+polarization/cult signals
+review evidence confidence
+expected scoring impact once connected
+```
+
+- [x] **Step 4: Decide what review evidence can and cannot fix**
+
+Expected outcome:
+
+```text
+Review/external quality fixes The Room-like quality failures.
+Review evidence helps Genocyber and Until Dawn because reviewers mention story/pacing/fear/structure issues.
+Review evidence does not fix Lucia or Sinners alone because external consensus is positive; those need personal negative anchors and mismatch calibration.
+```
+
+---
+
 ### Task 2: Add Genre-Adjusted External Quality Scoring
 
 **Files:**
