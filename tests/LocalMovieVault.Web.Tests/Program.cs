@@ -77,6 +77,8 @@ RunSmokeStep("AssertMovieDetailsViewShowsWowControls", AssertMovieDetailsViewSho
 RunSmokeStep("AssertMovieDetailsViewModelUsesHeroSlotRules", AssertMovieDetailsViewModelUsesHeroSlotRules);
 RunSmokeStep("AssertPlotKeywordExtractorDropsJunkTokens", AssertPlotKeywordExtractorDropsJunkTokens);
 RunSmokeStep("AssertTheRoomFixtureExtractsReviewDerivedSignals", AssertTheRoomFixtureExtractsReviewDerivedSignals);
+RunSmokeStep("AssertGenreAdjustedQualityRiskSignals", AssertGenreAdjustedQualityRiskSignals);
+RunSmokeStep("AssertGenreQualityCalibrationCoversKnownGenres", AssertGenreQualityCalibrationCoversKnownGenres);
 await RunSmokeStepAsync("AssertMovieDetailsDetailsActionLoadsReferenceMovieAsync", AssertMovieDetailsDetailsActionLoadsReferenceMovieAsync);
 await RunSmokeStepAsync("AssertMovieDetailsDetailsActionSuppressesWeakGenreOnlyReferenceAsync", AssertMovieDetailsDetailsActionSuppressesWeakGenreOnlyReferenceAsync);
 RunSmokeStep("AssertWatchModalSupportsReviewLater", AssertWatchModalSupportsReviewLater);
@@ -1123,6 +1125,223 @@ static void AssertTheRoomFixtureExtractsReviewDerivedSignals()
     if (signals.QualityRiskScore < 80m)
     {
         throw new Exception($"Expected The Room fixture to carry severe quality risk, found {signals.QualityRiskScore:0.0}.");
+    }
+}
+
+static void AssertGenreAdjustedQualityRiskSignals()
+{
+    static bool HasSignal(ReviewDerivedSignals signals, string key)
+        => signals.QualitySignals?.Any(x => string.Equals(x.Key, key, StringComparison.OrdinalIgnoreCase)) == true;
+
+    var horror = new Movie
+    {
+        Title = "Solid Horror",
+        GenresCsv = "Horror",
+        ImdbRating = 6.0m,
+        ImdbVotes = 25000,
+        Metascore = 58,
+        ExternalRatingsJson = """[{"Source":"Rotten Tomatoes","Value":"68%"}]"""
+    };
+    var horrorSignals = RecommendationCatalog.ExtractReviewDerivedSignals(horror);
+    if (horrorSignals.SpecialCases.Contains("severe-external-quality-risk", StringComparer.OrdinalIgnoreCase) ||
+        HasSignal(horrorSignals, RecommendationCatalog.GenreAdjustedImdbRiskSignal))
+    {
+        throw new Exception($"Expected a 6.0 horror movie to avoid genre-adjusted quality risk, found {horrorSignals.QualityRiskScore:0.0}.");
+    }
+
+    var weakHorror = new Movie
+    {
+        Title = "Weak Horror",
+        GenresCsv = "Horror",
+        ImdbRating = 5.9m,
+        ImdbVotes = 25000,
+        Metascore = 58,
+        ExternalRatingsJson = """[{"Source":"Rotten Tomatoes","Value":"68%"}]"""
+    };
+    var weakHorrorSignals = RecommendationCatalog.ExtractReviewDerivedSignals(weakHorror);
+    if (!HasSignal(weakHorrorSignals, RecommendationCatalog.GenreAdjustedImdbRiskSignal))
+    {
+        throw new Exception("Expected horror below 6.0 to expose mild genre-adjusted IMDb risk.");
+    }
+
+    var sciFi = new Movie
+    {
+        Title = "Borderline Sci-Fi",
+        GenresCsv = "Sci-Fi",
+        ImdbRating = 6.5m,
+        ImdbVotes = 25000,
+        Metascore = 58,
+        ExternalRatingsJson = """[{"Source":"Rotten Tomatoes","Value":"68%"}]"""
+    };
+    var sciFiSignals = RecommendationCatalog.ExtractReviewDerivedSignals(sciFi);
+    if (HasSignal(sciFiSignals, RecommendationCatalog.GenreAdjustedImdbRiskSignal))
+    {
+        throw new Exception("Expected sci-fi at 6.5 to avoid genre-adjusted IMDb risk.");
+    }
+
+    var weakSciFi = new Movie
+    {
+        Title = "Weak Sci-Fi",
+        GenresCsv = "Sci-Fi",
+        ImdbRating = 6.4m,
+        ImdbVotes = 25000,
+        Metascore = 58,
+        ExternalRatingsJson = """[{"Source":"Rotten Tomatoes","Value":"68%"}]"""
+    };
+    var weakSciFiSignals = RecommendationCatalog.ExtractReviewDerivedSignals(weakSciFi);
+    if (!HasSignal(weakSciFiSignals, RecommendationCatalog.GenreAdjustedImdbRiskSignal))
+    {
+        throw new Exception("Expected sci-fi below 6.5 to expose mild genre-adjusted IMDb risk.");
+    }
+
+    var animation = new Movie
+    {
+        Title = "Borderline Animation",
+        GenresCsv = "Animation",
+        ImdbRating = 7.0m,
+        ImdbVotes = 25000,
+        Metascore = 58,
+        ExternalRatingsJson = """[{"Source":"Rotten Tomatoes","Value":"68%"}]"""
+    };
+    var animationSignals = RecommendationCatalog.ExtractReviewDerivedSignals(animation);
+    if (HasSignal(animationSignals, RecommendationCatalog.GenreAdjustedImdbRiskSignal))
+    {
+        throw new Exception("Expected animation at 7.0 to avoid genre-adjusted IMDb risk.");
+    }
+
+    var weakAnimation = new Movie
+    {
+        Title = "Weak Animation",
+        GenresCsv = "Animation",
+        ImdbRating = 6.9m,
+        ImdbVotes = 25000,
+        Metascore = 58,
+        ExternalRatingsJson = """[{"Source":"Rotten Tomatoes","Value":"68%"}]"""
+    };
+    var weakAnimationSignals = RecommendationCatalog.ExtractReviewDerivedSignals(weakAnimation);
+    if (!HasSignal(weakAnimationSignals, RecommendationCatalog.GenreAdjustedImdbRiskSignal))
+    {
+        throw new Exception("Expected animation below 7.0 to expose mild genre-adjusted IMDb risk.");
+    }
+
+    var drama = new Movie
+    {
+        Title = "Marginal Drama",
+        GenresCsv = "Drama",
+        ImdbRating = 6.5m,
+        ImdbVotes = 25000,
+        Metascore = 58,
+        ExternalRatingsJson = """[{"Source":"Rotten Tomatoes","Value":"68%"}]"""
+    };
+    var dramaSignals = RecommendationCatalog.ExtractReviewDerivedSignals(drama);
+    if (!HasSignal(dramaSignals, RecommendationCatalog.GenreAdjustedImdbRiskSignal))
+    {
+        throw new Exception("Expected a 6.5 drama to expose mild genre-adjusted IMDb risk.");
+    }
+
+    if (dramaSignals.SpecialCases.Contains("severe-external-quality-risk", StringComparer.OrdinalIgnoreCase))
+    {
+        throw new Exception("Expected a 6.5 drama to avoid severe external quality risk.");
+    }
+
+    var severe = new Movie
+    {
+        Title = "Severe Quality Risk",
+        GenresCsv = "Drama",
+        ImdbRating = 3.6m,
+        ImdbVotes = 98635,
+        Metascore = 9,
+        ExternalRatingsJson = """[{"Source":"Rotten Tomatoes","Value":"24%"}]"""
+    };
+    var severeSignals = RecommendationCatalog.ExtractReviewDerivedSignals(severe);
+    if (!severeSignals.SpecialCases.Contains("severe-external-quality-risk", StringComparer.OrdinalIgnoreCase))
+    {
+        throw new Exception("Expected severe external quality risk for IMDb 3.6, Metascore 9, and RT 24%.");
+    }
+
+    var absoluteLowHorror = new Movie
+    {
+        Title = "Absolute Low Horror",
+        GenresCsv = "Horror",
+        ImdbRating = 4.6m,
+        ImdbVotes = 25000,
+        Metascore = 58,
+        ExternalRatingsJson = """[{"Source":"Rotten Tomatoes","Value":"68%"}]"""
+    };
+    var absoluteLowHorrorSignals = RecommendationCatalog.ExtractReviewDerivedSignals(absoluteLowHorror);
+    if (!HasSignal(absoluteLowHorrorSignals, "low-imdb-rating"))
+    {
+        throw new Exception("Expected IMDb 4.6 to use absolute low-imdb-rating.");
+    }
+
+    if (HasSignal(absoluteLowHorrorSignals, RecommendationCatalog.GenreAdjustedImdbRiskSignal))
+    {
+        throw new Exception("Expected IMDb 4.6 to avoid duplicate genre-adjusted IMDb risk.");
+    }
+
+    var slashGenre = new Movie
+    {
+        Title = "Slash Genre",
+        GenresCsv = "Crime/Thriller",
+        ImdbRating = 6.6m,
+        ImdbVotes = 25000,
+        Metascore = 58,
+        ExternalRatingsJson = """[{"Source":"Rotten Tomatoes","Value":"68%"}]"""
+    };
+    var slashGenreSignals = RecommendationCatalog.ExtractReviewDerivedSignals(slashGenre);
+    if (!HasSignal(slashGenreSignals, RecommendationCatalog.GenreAdjustedImdbRiskSignal))
+    {
+        throw new Exception("Expected slash-separated Crime/Thriller to use genre quality calibration.");
+    }
+}
+
+static void AssertGenreQualityCalibrationCoversKnownGenres()
+{
+    var knownGenres = new[]
+    {
+        "Action",
+        "Adventure",
+        "Animation",
+        "Biography",
+        "Comedy",
+        "Crime",
+        "Dark Comedy",
+        "Documentary",
+        "Drama",
+        "Family",
+        "Fantasy",
+        "Film-Noir",
+        "History",
+        "Horror",
+        "Misc",
+        "Music",
+        "Musical",
+        "Mystery",
+        "News",
+        "Psychological Thriller",
+        "Reality-TV",
+        "Romance",
+        "Sci-Fi",
+        "Science Fiction",
+        "Series",
+        "Short",
+        "Sport",
+        "Talk-Show",
+        "Thriller",
+        "TV Movie",
+        "War",
+        "Western"
+    };
+
+    var missing = knownGenres
+        .Select(RecommendationCatalog.NormalizeFeature)
+        .Where(genre => !RecommendationCatalog.GenreQualityCalibrations.ContainsKey(genre))
+        .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    if (missing.Count > 0)
+    {
+        throw new Exception($"Missing genre quality calibration for: {string.Join(", ", missing)}");
     }
 }
 

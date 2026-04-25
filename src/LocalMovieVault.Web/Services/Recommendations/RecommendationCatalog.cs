@@ -8,6 +8,8 @@ namespace LocalMovieVault.Web.Services.Recommendations;
 
 public static class RecommendationCatalog
 {
+    public sealed record GenreQualityCalibration(decimal ExpectedMean, decimal MildRiskBelow);
+
     private static readonly Dictionary<UserGrade, int> GradeScores = new()
     {
         [UserGrade.Loved] = 2,
@@ -90,6 +92,46 @@ public static class RecommendationCatalog
     public const string SoBadItsGoodSignal = "so-bad-it-good";
     public const string PolarizingCultSignal = "polarizing-cult";
     public const string SevereExternalQualityRiskSignal = "severe-external-quality-risk";
+    public const string GenreAdjustedImdbRiskSignal = "genre-adjusted-imdb-risk";
+
+    public static readonly GenreQualityCalibration DefaultGenreQualityCalibration = new(6.7m, 6.2m);
+
+    public static readonly IReadOnlyDictionary<string, GenreQualityCalibration> GenreQualityCalibrations =
+        new Dictionary<string, GenreQualityCalibration>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["action"] = new(7.1m, 6.6m),
+            ["adventure"] = new(7.1m, 6.6m),
+            ["animation"] = new(7.6m, 7.0m),
+            ["biography"] = new(7.3m, 6.8m),
+            ["horror"] = new(6.9m, 6.0m),
+            ["comedy"] = new(7.0m, 6.5m),
+            ["crime"] = new(7.2m, 6.7m),
+            ["dark comedy"] = new(7.0m, 6.5m),
+            ["documentary"] = new(7.4m, 6.8m),
+            ["drama"] = new(7.5m, 7.0m),
+            ["family"] = new(6.9m, 6.4m),
+            ["fantasy"] = new(7.0m, 6.5m),
+            ["film-noir"] = new(7.2m, 6.7m),
+            ["history"] = new(7.2m, 6.7m),
+            ["misc"] = DefaultGenreQualityCalibration,
+            ["music"] = new(7.1m, 6.6m),
+            ["musical"] = new(7.0m, 6.5m),
+            ["mystery"] = new(7.1m, 6.6m),
+            ["news"] = new(6.7m, 6.2m),
+            ["psychological thriller"] = new(7.2m, 6.7m),
+            ["reality-tv"] = new(6.2m, 5.7m),
+            ["romance"] = new(7.0m, 6.5m),
+            ["sci-fi"] = new(7.1m, 6.5m),
+            ["science fiction"] = new(7.1m, 6.5m),
+            ["series"] = DefaultGenreQualityCalibration,
+            ["short"] = new(6.8m, 6.3m),
+            ["sport"] = new(7.0m, 6.5m),
+            ["talk-show"] = new(6.2m, 5.7m),
+            ["thriller"] = new(7.2m, 6.7m),
+            ["tv movie"] = new(6.4m, 5.9m),
+            ["war"] = new(7.2m, 6.7m),
+            ["western"] = new(7.0m, 6.5m)
+        };
 
     public static int GetGradeWeight(UserGrade grade) => GradeScores[grade];
 
@@ -301,11 +343,23 @@ public static class RecommendationCatalog
 
         var qualityRisk = 0m;
 
-        if (movie.ImdbRating.HasValue && movie.ImdbVotes is >= 1000 && movie.ImdbRating.Value <= 4.5m)
+        if (movie.ImdbRating.HasValue && movie.ImdbVotes is >= 1000 && movie.ImdbRating.Value <= 4.8m)
         {
-            var strength = Math.Clamp((4.5m - movie.ImdbRating.Value) * 20m, 10m, 35m);
+            var strength = Math.Clamp((4.8m - movie.ImdbRating.Value) * 20m, 10m, 35m);
             qualitySignals.Add(new ExternalQualitySignal("low-imdb-rating", strength, "IMDb", true));
             qualityRisk += strength;
+        }
+
+        if (movie.ImdbRating.HasValue && movie.ImdbVotes is >= 1000 && movie.ImdbRating.Value > 4.8m)
+        {
+            var mildRiskBelow = GetGenreQualityMildRiskThreshold(movie);
+            var gap = mildRiskBelow - movie.ImdbRating.Value;
+            if (gap > 0m)
+            {
+                var strength = Math.Clamp(gap * 10m * GetImdbVoteConfidenceMultiplier(movie.ImdbVotes), 3m, 12m);
+                qualitySignals.Add(new ExternalQualitySignal(GenreAdjustedImdbRiskSignal, decimal.Round(strength, 1), "IMDb", true));
+                qualityRisk += strength;
+            }
         }
 
         if (movie.Metascore is <= 20)
@@ -346,6 +400,7 @@ public static class RecommendationCatalog
 
         var confidence = Math.Clamp(
             (qualitySignals.Count * 20m)
+            + GetImdbVoteConfidenceBonus(movie.ImdbVotes)
             + (IsKnownCultBadMovie(movie) ? 25m : 0m),
             0m,
             100m);
@@ -365,6 +420,43 @@ public static class RecommendationCatalog
     private static bool IsKnownCultBadMovie(Movie movie)
         => (movie.Title?.Trim().StartsWith("The Room", StringComparison.OrdinalIgnoreCase) ?? false)
            && string.Equals(movie.Director?.Trim(), "Tommy Wiseau", StringComparison.OrdinalIgnoreCase);
+
+    private static decimal GetGenreQualityMildRiskThreshold(Movie movie)
+    {
+        var genres = GenreHelper.SplitGenres(movie.GenresCsv, movie.Category);
+        if (genres.Count == 0)
+        {
+            return DefaultGenreQualityCalibration.MildRiskBelow;
+        }
+
+        return genres
+            .Select(NormalizeFeature)
+            .Select(genre => GenreQualityCalibrations.TryGetValue(genre, out var calibration)
+                ? calibration.MildRiskBelow
+                : DefaultGenreQualityCalibration.MildRiskBelow)
+            .Min();
+    }
+
+    private static decimal GetImdbVoteConfidenceMultiplier(int? imdbVotes)
+        => imdbVotes switch
+        {
+            >= 50000 => 1.0m,
+            >= 10000 => 0.9m,
+            >= 5000 => 0.8m,
+            >= 1000 => 0.65m,
+            _ => 0m
+        };
+
+    private static decimal GetImdbVoteConfidenceBonus(int? imdbVotes)
+        => imdbVotes switch
+        {
+            >= 100000 => 20m,
+            >= 50000 => 16m,
+            >= 10000 => 12m,
+            >= 5000 => 8m,
+            >= 1000 => 4m,
+            _ => 0m
+        };
 
     private static decimal? TryGetRottenTomatoesScore(string? ratingsJson)
     {

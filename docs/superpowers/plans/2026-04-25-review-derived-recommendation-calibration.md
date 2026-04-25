@@ -186,7 +186,7 @@ Review evidence does not fix Lucia or Sinners alone because external consensus i
 - Modify: `C:\Dev\MovieDb\src\LocalMovieVault.Web\Services\Recommendations\RecommendationFeatureExtractor.cs`
 - Modify: `C:\Dev\MovieDb\tests\LocalMovieVault.Web.Tests\Program.cs`
 
-- [ ] **Step 1: Write failing tests for genre baselines**
+- [x] **Step 1: Write failing tests for genre baselines**
 
 Add tests proving:
 
@@ -196,24 +196,24 @@ Drama IMDb 6.5 is a mild/medium quality concern.
 Any genre IMDb 3.6 with many votes and Metascore 9 is severe quality risk.
 ```
 
-- [ ] **Step 2: Add genre baseline rules**
+- [x] **Step 2: Add genre baseline rules**
 
 Use conservative baselines:
 
 ```text
-Horror: 6.2
-Comedy: 6.4
-Action: 6.5
-Sci-Fi: 6.7
-Thriller: 6.6
-Drama: 7.0
-Animation: 7.0
-Default: 6.7
+Horror mild risk below: 6.0
+Comedy mild risk below: 6.5
+Action mild risk below: 6.6
+Sci-Fi mild risk below: 6.5
+Thriller mild risk below: 6.7
+Drama mild risk below: 7.0
+Animation mild risk below: 7.0
+Default mild risk below: 6.2
 ```
 
 For multi-genre films, use the most forgiving baseline among present genres unless later tests prove that too loose.
 
-- [ ] **Step 3: Compute quality risk**
+- [x] **Step 3: Compute quality risk**
 
 Implement:
 
@@ -226,11 +226,78 @@ rottenTomatoesPenalty applies below 45%, severe below 30%
 
 Expected The Room fixture: severe risk.
 
-- [ ] **Step 4: Run targeted tests**
+- [x] **Step 4: Run targeted tests**
 
 Run: `dotnet run --project C:\Dev\MovieDb\tests\LocalMovieVault.Web.Tests\LocalMovieVault.Web.Tests.csproj`
 
 Expected: PASS for genre-adjusted quality tests.
+
+---
+
+### Task 2.5: Make Genre Quality Calibration Easy to Tune
+
+**Files:**
+- Modify: `C:\Dev\MovieDb\src\LocalMovieVault.Web\Services\Recommendations\RecommendationCatalog.cs`
+- Modify: `C:\Dev\MovieDb\tests\LocalMovieVault.Web.Tests\Program.cs`
+- Modify: `C:\Dev\MovieDb\docs\LLM_CONTEXT.md`
+
+- [x] **Step 1: Move genre quality numbers into one reachable table**
+
+Store genre quality calibration in `RecommendationCatalog.GenreQualityCalibrations`, with one entry per genre and a default fallback.
+
+- [x] **Step 2: Split documentation mean from penalty threshold**
+
+Use `ExpectedMean` for future diagnostics and `MildRiskBelow` as the actual trigger threshold.
+
+- [x] **Step 3: Apply the user-approved risk thresholds**
+
+Current `MildRiskBelow` values:
+
+```text
+Action: 6.6
+Adventure: 6.6
+Animation: 7.0
+Biography: 6.8
+Comedy: 6.5
+Crime: 6.7
+Documentary: 6.8
+Drama: 7.0
+Family: 6.4
+Fantasy: 6.5
+Film-Noir: 6.7
+History: 6.7
+Horror: 6.0
+Music: 6.6
+Musical: 6.5
+Mystery: 6.6
+Romance: 6.5
+Sci-Fi: 6.5
+Short: 6.3
+Sport: 6.5
+Thriller: 6.7
+TV Movie: 5.9
+War: 6.7
+Western: 6.5
+Default: 6.2
+```
+
+- [x] **Step 4: Add boundary tests**
+
+Smoke coverage verifies:
+
+```text
+Horror 6.0 is not risk, Horror 5.9 is risk.
+Sci-Fi 6.5 is not risk, Sci-Fi 6.4 is risk.
+Animation 7.0 is not risk, Animation 6.9 is risk.
+Drama 6.5 remains risk.
+IMDb 4.6 uses absolute low-imdb-rating, not duplicate genre-adjusted IMDb risk.
+Slash-separated genres such as Crime/Thriller use genre calibration.
+Severe external quality cases remain severe.
+```
+
+- [x] **Step 5: Document fine-tuning instructions**
+
+Record the calibration table location and tuning workflow in `docs/LLM_CONTEXT.md`.
 
 ---
 

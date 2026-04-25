@@ -55,6 +55,40 @@ Purpose: fast, low-token orientation for future fixes without rescanning the who
 - User-facing match/review decisions should use `PredictedScore` first
 - `PersonalMatchScore` still exists as an internal broad-fit score and may be useful for diagnostics
 
+## Recommendation Fine-Tuning
+
+- Genre-adjusted IMDb quality thresholds live in `RecommendationCatalog.GenreQualityCalibrations`.
+- Each entry has `ExpectedMean` for documentation/diagnostics and `MildRiskBelow` for the actual mild quality-risk trigger.
+- Current `MildRiskBelow` rules:
+  - Action: below `6.6`
+  - Adventure: below `6.6`
+  - Animation: below `7.0`
+  - Biography: below `6.8`
+  - Comedy: below `6.5`
+  - Crime: below `6.7`
+  - Documentary: below `6.8`
+  - Drama: below `7.0`
+  - Family: below `6.4`
+  - Fantasy: below `6.5`
+  - Film-Noir: below `6.7`
+  - History: below `6.7`
+  - Horror: below `6.0`
+  - Music: below `6.6`
+  - Musical: below `6.5`
+  - Mystery: below `6.6`
+  - Romance: below `6.5`
+  - Sci-Fi: below `6.5`
+  - Short: below `6.3`
+  - Sport: below `6.5`
+  - Thriller: below `6.7`
+  - TV Movie: below `5.9`
+  - War: below `6.7`
+  - Western: below `6.5`
+  - Default/unknown genre: below `6.2`
+- For multi-genre films, the scorer uses the most forgiving threshold among present genres.
+- IMDb-derived signals are mutually exclusive: `IMDb <= 4.8` uses `low-imdb-rating`; above that, genre thresholds may produce `genre-adjusted-imdb-risk`.
+- Tune these values only with smoke coverage in `AssertGenreAdjustedQualityRiskSignals`, then run the repo smoke wrapper.
+
 ## Frontend Interaction Model
 
 - Cards carry movie state through `data-*` attributes in `_DiscoveryCard.cshtml`
