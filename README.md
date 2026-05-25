@@ -6,7 +6,7 @@ MyMovieDB is a local-first ASP.NET Core + SQLite movie recommendation lab. The m
 
 It demonstrates deterministic recommendation logic, scoring experiments, local data management, reporting, and dataset cleanup workflows.
 
-Локальная база фильмов на ASP.NET Core + SQLite.
+Local movie database and recommendation calibration workspace built with ASP.NET Core + SQLite.
 
 ## Core idea: recommendation calibration
 
@@ -18,21 +18,21 @@ It demonstrates deterministic recommendation logic, scoring experiments, local d
 
 This is iterative calibration and scoring, not an ML training pipeline. The repository is designed so the reasoning, benchmark outputs, and data cleanup steps remain inspectable.
 
-## Что оставлено в корне
-- `run-dev.bat` — главный запуск
-- `build-release.bat` — release publish
-- `missing-report.bat` — отчёт по ненайденным фильмам
+## Root files kept intentionally
+- `run-dev.bat` - main local startup command
+- `build-release.bat` - release publish command
+- `missing-report.bat` - report for movies with missing files
 - `global.json`
 - `README.md`
 - `src/`
 - `tools/`
 - `scripts/`
 
-## Запуск
-1. Распакуй архив в любую папку
-2. Запусти `run-dev.bat`
+## Run
+1. Unpack the archive into any folder.
+2. Run `run-dev.bat`.
 
-Данные, база и настройки лежат в:
+Data, database, and settings are stored in:
 `Documents\MyMovieDB`
 
 ## Recommendation Tuning / Benchmark
