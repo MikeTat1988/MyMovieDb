@@ -1,6 +1,6 @@
 # MyMovieDB
 
-![MyMovieDB recommendation calibration banner](docs/assets/moviedb-banner.svg)
+![MyMovieDB recommendation calibration banner](docs/assets/MovieDbBanner.png)
 
 MyMovieDB is a local-first ASP.NET Core + SQLite movie recommendation lab. The main value is not just storing a movie list, but making personal taste prediction visible and adjustable: movies are evaluated with meaningful parameters, scored with weighted rules, compared with real ratings, and recalibrated over time.
 
